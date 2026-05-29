@@ -1,0 +1,34 @@
+import { describe, expect, it } from 'vitest';
+import { createMapBusinessDemoState } from '../data/seed';
+import { calculateOrgInsights } from './insights';
+import { buildOrgGraph } from './graph';
+
+describe('org graph performance', () => {
+  it('keeps formal org chart rendering bounded at 5,000+ people scale', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+
+    const graphStart = performance.now();
+    const graph = buildOrgGraph(state, {
+      company: '',
+      search: '',
+      focusPersonName: '',
+      minConfidence: 0.75,
+      visibleLimit: 300,
+      maxDepth: 3,
+    });
+    const graphDuration = performance.now() - graphStart;
+
+    const insightStart = performance.now();
+    const metrics = calculateOrgInsights(state);
+    const insightDuration = performance.now() - insightStart;
+
+    expect(state.people.length).toBeGreaterThan(5000);
+    expect(graph.nodes.length).toBeLessThanOrEqual(300);
+    expect(graph.lanes.length).toBeGreaterThan(5);
+    expect(graph.diagnostics.hiddenDirectReports).toBeGreaterThan(1000);
+    expect(metrics.peopleCount).toBe(state.people.length);
+    expect(graphDuration).toBeLessThan(1000);
+    expect(insightDuration).toBeLessThan(1500);
+  });
+});
