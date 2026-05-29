@@ -49,7 +49,7 @@ import { addImportResult, updateCandidateStatus } from './lib/merge';
 import { exportEncryptedProjectPackage, importEncryptedProjectPackage } from './lib/projectPackage';
 import { buildStaleEvents } from './lib/stale';
 import { downloadBlob, exportOrgGraphPng, exportReportPptx } from './lib/exporters';
-import { createId } from './lib/ids';
+import { createId, normalizeName } from './lib/ids';
 import { buildExecutiveNarrative } from './lib/insights';
 import type {
   AnyCandidatePayload,
@@ -74,14 +74,18 @@ type ViewKey = 'dashboard' | 'brief' | 'import' | 'review' | 'map' | 'people' | 
 type BriefFocusMode = 'intern' | 'junior' | 'hrbp' | 'expert';
 
 const navItems: Array<{ key: ViewKey; label: string; icon: typeof LayoutDashboard }> = [
-  { key: 'dashboard', label: '项目仪表盘', icon: LayoutDashboard },
-  { key: 'brief', label: '管理简报', icon: BriefcaseBusiness },
-  { key: 'import', label: '导入箱', icon: Inbox },
-  { key: 'review', label: '候选确认', icon: Check },
+  { key: 'dashboard', label: '项目', icon: LayoutDashboard },
+  { key: 'import', label: '导入', icon: Inbox },
+  { key: 'review', label: '确认', icon: Check },
   { key: 'map', label: '组织图', icon: Network },
-  { key: 'people', label: '人员组织', icon: Users },
-  { key: 'timeline', label: '变更时间线', icon: Clock3 },
-  { key: 'export', label: '导出中心', icon: Download },
+  { key: 'export', label: '导出', icon: Download },
+];
+
+const workflowSteps: Array<{ key: ViewKey; label: string; description: string }> = [
+  { key: 'import', label: '1 导入资料', description: '上传文本或 PPTX' },
+  { key: 'review', label: '2 确认识别', description: '检查人员和汇报线' },
+  { key: 'map', label: '3 修组织图', description: '自动生成或手动修图' },
+  { key: 'export', label: '4 导出分享', description: 'PPT / PNG / 项目包' },
 ];
 
 const briefFocusCopy: Record<
@@ -323,6 +327,52 @@ function riskToneLabel(tone: 'good' | 'warning' | 'danger'): string {
   }[tone];
 }
 
+function nextWorkflowView(state: AppState, pendingCount: number): ViewKey {
+  if (state.sources.length === 0) return 'import';
+  if (pendingCount > 0 || state.people.length === 0) return 'review';
+  if (state.reportingLines.length === 0) return 'map';
+  return 'export';
+}
+
+function sourceHealth(source: AppState['sources'][number]): {
+  label: string;
+  tone: 'good' | 'warning' | 'danger';
+  detail: string;
+  action: string;
+} {
+  const warningText = (source.warnings ?? []).join(' ');
+  if (source.totalChunks > 0 && !warningText) {
+    return {
+      label: '可识别',
+      tone: 'good',
+      detail: `已读取 ${source.totalChunks} 条文本片段${source.pages ? `，共 ${source.pages} 页` : ''}。`,
+      action: '去确认识别结果',
+    };
+  }
+  if (source.totalChunks > 0) {
+    return {
+      label: '部分可识别',
+      tone: 'warning',
+      detail: `读取到 ${source.totalChunks} 条文本片段，但有 ${source.warnings?.length ?? 0} 条提示需要复核。`,
+      action: '先看预览，再人工确认',
+    };
+  }
+  if (/截图|图片|OCR|未解析到/.test(warningText)) {
+    return {
+      label: '需要人工辅助',
+      tone: 'danger',
+      detail: '这份 PPT 可能是截图型组织图，浏览器不能直接读取形状和文字。',
+      action: '开启 OCR 后重试，或在组织图页手动新增人员和汇报线',
+    };
+  }
+  return {
+    label: '未识别',
+    tone: 'danger',
+    detail: '没有读取到可抽取文本。',
+    action: '请换文本型 PPT、转写文本，或使用手动修图',
+  };
+}
+
 function App() {
   const [state, setState] = useState<AppState>(() => createEmptyState());
   const [activeView, setActiveView] = useState<ViewKey>('dashboard');
@@ -377,8 +427,8 @@ function App() {
   async function handleFiles(files: FileList | null): Promise<void> {
     if (!files?.length) return;
     const selected = [...files];
-    setActiveView('review');
     setImportLog([]);
+    let generatedCandidateCount = 0;
 
     for (const file of selected) {
       try {
@@ -394,18 +444,23 @@ function App() {
             { entityCount: result.candidates.length, view: 'import', sourceName: file.name },
           ),
         );
+        generatedCandidateCount += result.candidates.length;
         setImportLog((log) => [
-          `${file.name}: 生成 ${result.candidates.length} 条候选，${result.evidence.length} 条证据`,
+          result.candidates.length > 0
+            ? `${file.name}: 已生成 ${result.candidates.length} 条待确认结果，下一步请去“确认”。`
+            : `${file.name}: 没有生成候选，请看文件体检提示；可重试 OCR 或手动修图。`,
           ...result.warnings,
           ...log,
         ]);
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         setImportLog((log) => [
-          `${file.name}: 导入失败：${error instanceof Error ? error.message : String(error)}`,
+          `${file.name}: 导入失败。请确认文件没有损坏，且是 .txt/.md/.pptx。原始错误：${message}`,
           ...log,
         ]);
       }
     }
+    if (generatedCandidateCount > 0) setActiveView('review');
   }
 
   function decideCandidates(candidateIds: string[], status: 'accepted' | 'rejected'): void {
@@ -527,7 +582,7 @@ function App() {
           </div>
           <div>
             <strong>Mapping 工具</strong>
-            <span>Local-first HR workbench</span>
+            <span>本地组织图生成器</span>
           </div>
         </div>
 
@@ -600,6 +655,13 @@ function App() {
           </div>
         )}
 
+        <WorkflowBar
+          state={state}
+          pendingCount={pendingCandidates.length}
+          activeView={activeView}
+          setActiveView={setActiveView}
+        />
+
         {activeView === 'dashboard' && (
           <Dashboard state={state} pendingCount={pendingCandidates.length} setActiveView={setActiveView} />
         )}
@@ -620,6 +682,7 @@ function App() {
             importLog={importLog}
             sources={state.sources}
             onFiles={handleFiles}
+            setActiveView={setActiveView}
           />
         )}
 
@@ -724,8 +787,8 @@ function Dashboard({
 
       <section className="tool-panel management-summary">
         <div className="section-heading">
-          <h2>管理结论</h2>
-          <span className="small-badge">{narrative.metrics.readinessLabel}</span>
+          <h2>项目现在到哪一步了</h2>
+          <span className="small-badge">按流程走，不用猜</span>
         </div>
         <div className="summary-line">
           <strong>{narrative.metrics.readinessScore}</strong>
@@ -736,9 +799,9 @@ function Dashboard({
               {narrative.metrics.freshnessScore} · 风险 {riskCount}
             </span>
           </div>
-          <button type="button" className="secondary-button" onClick={() => setActiveView('brief')}>
-            <BarChart3 size={16} />
-            查看简报
+          <button type="button" className="primary-button" onClick={() => setActiveView(nextWorkflowView(state, pendingCount))}>
+            <Target size={16} />
+            继续下一步
           </button>
         </div>
       </section>
@@ -764,7 +827,7 @@ function Dashboard({
                 </div>
               </article>
             ))}
-            {state.sources.length === 0 && <EmptyState title="还没有导入资料" body="导入转写文本或 PPTX 后会自动生成待确认候选。" />}
+            {state.sources.length === 0 && <EmptyState title="先上传一份资料" body="支持转写文本、Markdown 和文本型 PPTX；截图型 PPT 会进入人工辅助流程。" />}
           </div>
         </section>
 
@@ -817,6 +880,63 @@ function Dashboard({
           ))}
         </div>
       </section>
+    </section>
+  );
+}
+
+function WorkflowBar({
+  state,
+  pendingCount,
+  activeView,
+  setActiveView,
+}: {
+  state: AppState;
+  pendingCount: number;
+  activeView: ViewKey;
+  setActiveView: (view: ViewKey) => void;
+}) {
+  const currentView = nextWorkflowView(state, pendingCount);
+  const stepState = (step: ViewKey): 'done' | 'active' | 'todo' => {
+    if (step === 'import') return state.sources.length > 0 ? 'done' : currentView === step ? 'active' : 'todo';
+    if (step === 'review') {
+      if (state.sources.length > 0 && pendingCount === 0 && state.people.length > 0) return 'done';
+      return currentView === step ? 'active' : 'todo';
+    }
+    if (step === 'map') {
+      if (state.reportingLines.length > 0) return 'done';
+      return currentView === step ? 'active' : 'todo';
+    }
+    if (step === 'export') return currentView === step ? 'active' : 'todo';
+    return 'todo';
+  };
+
+  return (
+    <section className="workflow-bar" aria-label="工作流程">
+      <div>
+        <strong>当前建议：{workflowSteps.find((step) => step.key === currentView)?.label}</strong>
+        <span>
+          {state.sources.length === 0
+            ? '先导入一份资料，系统会做文件体检和识别预览。'
+            : pendingCount > 0
+              ? `还有 ${pendingCount} 条结果等你确认。`
+              : state.reportingLines.length === 0
+                ? '还没有可用汇报线，可以在组织图页手动补线。'
+                : '组织图已可导出，导出前请看发布检查。'}
+        </span>
+      </div>
+      <div className="workflow-steps">
+        {workflowSteps.map((step) => (
+          <button
+            key={step.key}
+            type="button"
+            className={`${stepState(step.key)} ${activeView === step.key ? 'selected' : ''}`}
+            onClick={() => setActiveView(step.key)}
+          >
+            <strong>{step.label}</strong>
+            <span>{step.description}</span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1444,19 +1564,35 @@ function ImportView({
   importLog,
   sources,
   onFiles,
+  setActiveView,
 }: {
   enableOcr: boolean;
   setEnableOcr: (value: boolean) => void;
   importLog: string[];
   sources: AppState['sources'];
   onFiles: (files: FileList | null) => void;
+  setActiveView: (view: ViewKey) => void;
 }) {
   return (
     <section className="view-stack">
+      <section className="tool-panel import-primer">
+        <div>
+          <span className="small-badge">第 1 步</span>
+          <h2>先让系统判断文件能不能识别</h2>
+          <p>
+            文本型 PPT 和转写文本会自动抽取人员、岗位、部门和汇报线；截图型组织图会先给出体检结论，再引导你 OCR 或手动补线。
+          </p>
+        </div>
+        <button type="button" className="secondary-button" onClick={() => setActiveView('map')}>
+          <Network size={16} />
+          直接手动修图
+        </button>
+      </section>
+
       <div className="drop-zone">
         <Upload size={30} />
         <h2>导入转写文本或 PPTX</h2>
-        <p>支持 .txt、.md、.pptx。文件只在浏览器中读取，不上传服务器。</p>
+        <p>支持 .txt、.md、.pptx。文件只在浏览器中读取，不上传服务器。截图型 PPT 不会硬撑自动识别，会进入人工辅助。</p>
         <input
           type="file"
           multiple
@@ -1466,7 +1602,7 @@ function ImportView({
         />
         <label className="toggle-line">
           <input type="checkbox" checked={enableOcr} onChange={(event) => setEnableOcr(event.target.checked)} />
-          <span>对 PPT 图片尝试本地 OCR</span>
+          <span>对 PPT 图片尝试本地 OCR（速度较慢，结果需要人工确认）</span>
         </label>
       </div>
 
@@ -1492,16 +1628,26 @@ function ImportView({
           <div className="record-list">
             {sources.map((source) => (
               <article className="source-card" key={source.id}>
-                <strong>{source.fileName}</strong>
+                <div className="source-card-head">
+                  <strong>{source.fileName}</strong>
+                  <span className={`health-pill ${sourceHealth(source).tone}`}>{sourceHealth(source).label}</span>
+                </div>
                 <span>
                   {source.type.toUpperCase()} · {source.totalChunks} 条片段 · {formatDate(source.importedAt)}
                 </span>
+                <div className="file-health">
+                  <p>{sourceHealth(source).detail}</p>
+                  <em>{sourceHealth(source).action}</em>
+                </div>
                 <p>{source.textPreview || '无文本预览'}</p>
                 {source.warnings?.map((warning) => (
                   <em key={warning}>{warning}</em>
                 ))}
               </article>
             ))}
+            {sources.length === 0 && (
+              <EmptyState title="还没有文件" body="上传后这里会显示文件体检：可识别、部分可识别，或需要人工辅助。" />
+            )}
           </div>
         </section>
       </div>
@@ -1523,6 +1669,13 @@ function ReviewView({
   const [kindFilter, setKindFilter] = useState<CandidateKind | 'all'>('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const sourceOptions = [...new Set(candidates.map((candidate) => candidate.sourceName))];
+  const kindCounts = (Object.keys(kindLabel) as CandidateKind[]).map((kind) => ({
+    kind,
+    label: kindLabel[kind],
+    count: candidates.filter((candidate) => candidate.kind === kind).length,
+  }));
+  const strongCount = candidates.filter((candidate) => candidate.confidence >= 0.8).length;
+  const weakCount = candidates.filter((candidate) => candidate.confidence < 0.55).length;
   const visibleCandidates = candidates
     .filter((candidate) => kindFilter === 'all' || candidate.kind === kindFilter)
     .filter((candidate) => sourceFilter === 'all' || candidate.sourceName === sourceFilter)
@@ -1563,6 +1716,29 @@ function ReviewView({
 
   return (
     <section className="view-stack">
+      <section className="tool-panel recognition-preview">
+        <div className="section-heading">
+          <h2>识别结果预览</h2>
+          <span className="small-badge">第 2 步：先确认，再入图</span>
+        </div>
+        <div className="recognition-grid">
+          {kindCounts.map((item) => (
+            <button
+              key={item.kind}
+              type="button"
+              className={kindFilter === item.kind ? 'active' : ''}
+              onClick={() => setKindFilter(item.kind)}
+            >
+              <strong>{item.count}</strong>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="panel-note">
+          系统只把这里“接受”的结果写入组织图。强证据 {strongCount} 条，弱证据 {weakCount} 条；弱证据建议先看原文，不要一键入库。
+        </p>
+      </section>
+
       <div className="toolbar">
         <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as CandidateKind | 'all')}>
           <option value="all">全部候选</option>
@@ -1762,6 +1938,8 @@ function OrgMapView({
   const [editMode, setEditMode] = useState(false);
   const [reportMode, setReportMode] = useState(false);
   const [timeView, setTimeView] = useState<'current' | 'changes90'>('current');
+  const [manualPerson, setManualPerson] = useState({ name: '', title: '', department: '', company: '' });
+  const [manualLine, setManualLine] = useState({ manager: '', subordinate: '' });
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance | null>(null);
   const reportFiltersRef = useRef<Pick<OrgMapFilters, 'visibleLimit' | 'maxDepth'> | null>(null);
   const chartMode = state.project.settings.orgChartMode ?? 'formal';
@@ -1800,6 +1978,7 @@ function OrgMapView({
   };
   const updateChartMode = (mode: OrgChartMode) => {
     if (mode === 'formal') setEditMode(false);
+    if (mode === 'explore') setEditMode(true);
     setState((current) => ({
       ...current,
       project: {
@@ -1812,6 +1991,111 @@ function OrgMapView({
       },
     }));
     window.setTimeout(() => flowInstance?.fitView({ duration: 280 }), 60);
+  };
+  const upsertManualPerson = (input: typeof manualPerson) => {
+    const name = input.name.trim();
+    if (!name) return;
+    const timestamp = new Date().toISOString();
+    setState((current) => {
+      const next: AppState = structuredClone(current);
+      const existing = next.people.find((person) => normalizeName(person.name) === normalizeName(name));
+      const company = input.company.trim() || existing?.company || next.project.companies[0] || '待确认公司';
+      const department = input.department.trim() || existing?.currentDepartment;
+      const title = input.title.trim() || existing?.currentTitle;
+      if (existing) {
+        existing.company = company;
+        existing.currentDepartment = department;
+        existing.currentTitle = title;
+        existing.status = existing.status === 'left' ? 'left' : 'active';
+        existing.updatedAt = timestamp;
+      } else {
+        next.people.push({
+          id: createId('person'),
+          name,
+          aliases: [],
+          company,
+          currentTitle: title,
+          currentDepartment: department,
+          tags: ['手动补录'],
+          status: 'active',
+          evidenceIds: [],
+          updatedAt: timestamp,
+        });
+      }
+      if (company && !next.project.companies.includes(company)) next.project.companies.push(company);
+      if (department && !next.orgUnits.some((unit) => unit.company === company && unit.name === department)) {
+        next.orgUnits.push({
+          id: createId('org'),
+          company,
+          name: department,
+          status: 'active',
+          evidenceIds: [],
+          updatedAt: timestamp,
+        });
+      }
+      if (title && !next.roleAssignments.some((role) => normalizeName(role.personName) === normalizeName(name) && role.title === title)) {
+        next.roleAssignments.push({
+          id: createId('role'),
+          personName: name,
+          title,
+          orgUnitName: department,
+          company,
+          status: 'current',
+          evidenceIds: [],
+          updatedAt: timestamp,
+        });
+      }
+      next.project.updatedAt = timestamp;
+      return appendAudit(next, 'talent-updated', `手动补录人员 ${name}`, { view: 'map' });
+    });
+    setManualPerson({ name: '', title: '', department: '', company: '' });
+  };
+  const addManualLine = () => {
+    const manager = manualLine.manager.trim();
+    const subordinate = manualLine.subordinate.trim();
+    if (!manager || !subordinate || normalizeName(manager) === normalizeName(subordinate)) return;
+    const timestamp = new Date().toISOString();
+    setState((current) => {
+      const next: AppState = structuredClone(current);
+      for (const name of [manager, subordinate]) {
+        if (!next.people.some((person) => normalizeName(person.name) === normalizeName(name))) {
+          next.people.push({
+            id: createId('person'),
+            name,
+            aliases: [],
+            company: next.project.companies[0] || '待确认公司',
+            tags: ['手动补录'],
+            status: 'active',
+            evidenceIds: [],
+            updatedAt: timestamp,
+          });
+        }
+      }
+      const existing = next.reportingLines.find(
+        (line) =>
+          normalizeName(line.managerName) === normalizeName(manager) &&
+          normalizeName(line.subordinateName) === normalizeName(subordinate),
+      );
+      if (existing) {
+        existing.confidence = 1;
+        existing.isCurrent = true;
+        existing.updatedAt = timestamp;
+      } else {
+        next.reportingLines.push({
+          id: createId('line'),
+          subordinateName: subordinate,
+          managerName: manager,
+          relationType: 'reports-to',
+          confidence: 1,
+          evidenceIds: [],
+          isCurrent: true,
+          updatedAt: timestamp,
+        });
+      }
+      next.project.updatedAt = timestamp;
+      return appendAudit(next, 'talent-updated', `手动新增汇报线 ${subordinate} -> ${manager}`, { view: 'map' });
+    });
+    setManualLine({ manager: '', subordinate: '' });
   };
   const graphNodes: Node[] = useMemo(
     () => {
@@ -2026,7 +2310,7 @@ function OrgMapView({
               title={orgChartModeLabel(mode)}
             >
               {mode === 'formal' ? <Network size={16} /> : <Move size={16} />}
-              {mode === 'formal' ? '正式图' : '探索'}
+              {mode === 'formal' ? '自动生成图' : '手动修图'}
             </button>
           ))}
         </div>
@@ -2119,10 +2403,10 @@ function OrgMapView({
           {canManualEdit ? <Move size={15} /> : <Lock size={15} />}
           <span>
             {isFormalChart
-              ? `正式图：按层级、BU 泳道和直角汇报线自动排版，隐藏 ${graph.diagnostics.hiddenDirectReports} 个下钻节点`
+              ? `自动生成图：按公司、部门和汇报线排版，隐藏 ${graph.diagnostics.hiddenDirectReports} 个下钻节点`
               : canManualEdit
-              ? `编辑中：拖动节点会写入项目布局，已保存 ${savedCount} 个节点`
-              : `浏览中：导出会使用当前手工布局，已保存 ${savedCount} 个节点`}
+                ? `手动修图：可以拖动节点，也可以在下方新增人员和汇报线`
+                : `浏览中：导出会使用当前手工布局，已保存 ${savedCount} 个节点`}
           </span>
         </div>
       </div>
@@ -2224,6 +2508,41 @@ function OrgMapView({
             <span key={`${name}-${index}`}>{name}</span>
           ))}
         </div>
+      )}
+
+      {!isFormalChart && (
+        <section className="tool-panel manual-repair-panel">
+          <div className="section-heading">
+            <h2>手动修图工具</h2>
+            <span className="small-badge">PPT 识别不准时用这里补</span>
+          </div>
+          <div className="manual-repair-grid">
+            <div>
+              <h3>新增/更新人员</h3>
+              <div className="candidate-fields">
+                <Field label="姓名" value={manualPerson.name} onChange={(value) => setManualPerson((current) => ({ ...current, name: value }))} />
+                <Field label="岗位" value={manualPerson.title} onChange={(value) => setManualPerson((current) => ({ ...current, title: value }))} />
+                <Field label="部门" value={manualPerson.department} onChange={(value) => setManualPerson((current) => ({ ...current, department: value }))} />
+                <Field label="公司" value={manualPerson.company} onChange={(value) => setManualPerson((current) => ({ ...current, company: value }))} />
+              </div>
+              <button type="button" className="primary-button" onClick={() => upsertManualPerson(manualPerson)}>
+                <Users size={16} />
+                保存人员
+              </button>
+            </div>
+            <div>
+              <h3>新增汇报线</h3>
+              <div className="candidate-fields compact-fields">
+                <Field label="上级" value={manualLine.manager} onChange={(value) => setManualLine((current) => ({ ...current, manager: value }))} />
+                <Field label="下级" value={manualLine.subordinate} onChange={(value) => setManualLine((current) => ({ ...current, subordinate: value }))} />
+              </div>
+              <button type="button" className="primary-button" onClick={addManualLine}>
+                <Network size={16} />
+                连接上下级
+              </button>
+            </div>
+          </div>
+        </section>
       )}
 
       {graph.truncated && (
@@ -2544,6 +2863,7 @@ function ExportView({
   const exportNarrative = useMemo(() => buildExecutiveNarrative(state), [state]);
   const pendingCount = state.candidates.filter((candidate) => candidate.status === 'pending').length;
   const riskCount = exportNarrative.risks.filter((risk) => risk.tone !== 'good').length;
+  const failedSourceCount = state.sources.filter((source) => sourceHealth(source).tone === 'danger').length;
   const publishChecks = [
     {
       label: '汇报模板',
@@ -2559,6 +2879,16 @@ function ExportView({
       label: '候选复核',
       value: pendingCount === 0 ? '无待确认候选' : `${pendingCount} 条待确认`,
       done: pendingCount === 0,
+    },
+    {
+      label: '文件识别',
+      value: failedSourceCount === 0 ? '无失败文件' : `${failedSourceCount} 个文件需人工辅助`,
+      done: failedSourceCount === 0,
+    },
+    {
+      label: '孤立人员',
+      value: exportNarrative.metrics.orphanPeopleCount === 0 ? '无孤立人员' : `${exportNarrative.metrics.orphanPeopleCount} 人未接入汇报线`,
+      done: exportNarrative.metrics.orphanPeopleCount === 0,
     },
     {
       label: '敏感分级',

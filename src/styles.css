@@ -182,6 +182,63 @@ button {
   gap: 16px;
 }
 
+.workflow-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.65fr) minmax(0, 1.35fr);
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+}
+
+.workflow-bar > div:first-child {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+}
+
+.workflow-bar span {
+  color: var(--color-subtle);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.workflow-steps button {
+  display: grid;
+  gap: 3px;
+  min-height: 62px;
+  padding: 10px;
+  color: var(--color-text);
+  text-align: left;
+  background: #f8fbff;
+  border: 1px solid #d8e7ff;
+  border-radius: 8px;
+}
+
+.workflow-steps button.done {
+  background: #f0fbf7;
+  border-color: #bdebd9;
+}
+
+.workflow-steps button.active,
+.workflow-steps button.selected {
+  color: var(--color-primary-strong);
+  background: var(--color-primary-soft);
+  border-color: #8fc0ff;
+}
+
+.workflow-steps button span {
+  font-size: 12px;
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -1442,6 +1499,24 @@ button {
   border-radius: 8px;
 }
 
+.import-primer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.import-primer h2,
+.import-primer p {
+  margin: 0;
+}
+
+.import-primer p {
+  margin-top: 6px;
+  color: var(--color-subtle);
+  line-height: 1.5;
+}
+
 .drop-zone h2,
 .drop-zone p {
   margin: 0;
@@ -1459,6 +1534,60 @@ button {
   background: #f1f6f4;
   border: 1px solid #cddbd5;
   border-radius: 8px;
+}
+
+.source-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.health-pill {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.health-pill.good {
+  color: #057a55;
+  background: #e8f8f2;
+}
+
+.health-pill.warning {
+  color: #8a5a00;
+  background: #fff5d8;
+}
+
+.health-pill.danger {
+  color: #b5372d;
+  background: #fff1f0;
+}
+
+.file-health {
+  margin: 8px 0;
+  padding: 9px 10px;
+  background: #f8fbff;
+  border: 1px solid #d8e7ff;
+  border-radius: 8px;
+}
+
+.file-health p,
+.file-health em {
+  margin: 0;
+  color: #4e5969;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.file-health em {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-primary-strong);
+  font-style: normal;
+  font-weight: 700;
 }
 
 .toggle-line {
@@ -1493,6 +1622,39 @@ button {
   background: #ffffff;
   border: 1px solid #dbe5e1;
   border-radius: 8px;
+}
+
+.recognition-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.recognition-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.recognition-grid button {
+  display: grid;
+  gap: 2px;
+  min-height: 66px;
+  padding: 10px;
+  color: var(--color-text);
+  text-align: left;
+  background: #f8fbff;
+  border: 1px solid #d8e7ff;
+  border-radius: 8px;
+}
+
+.recognition-grid button.active {
+  color: var(--color-primary-strong);
+  background: var(--color-primary-soft);
+  border-color: #8fc0ff;
+}
+
+.recognition-grid strong {
+  font-size: 24px;
 }
 
 .conflict-helper {
@@ -1856,6 +2018,26 @@ blockquote {
 .focus-breadcrumb span:not(:last-child)::after {
   color: #8a96a8;
   content: "/";
+}
+
+.manual-repair-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.manual-repair-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 14px;
+}
+
+.manual-repair-grid h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.compact-fields {
+  grid-template-columns: 1fr 1fr;
 }
 
 .flow-surface {
@@ -2335,7 +2517,11 @@ blockquote {
   .export-grid,
   .map-controls,
   .canvas-command-bar,
-  .org-chart-summary {
+  .org-chart-summary,
+  .workflow-bar,
+  .workflow-steps,
+  .recognition-grid,
+  .manual-repair-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -2406,6 +2592,10 @@ blockquote {
   .map-controls,
   .canvas-command-bar,
   .org-chart-summary,
+  .workflow-bar,
+  .workflow-steps,
+  .recognition-grid,
+  .manual-repair-grid,
   .candidate-fields {
     grid-template-columns: 1fr;
   }
