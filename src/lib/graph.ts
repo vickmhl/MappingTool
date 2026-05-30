@@ -25,6 +25,7 @@ export interface OrgGraphNode {
   depth: number;
   levelLabel: string;
   span: number;
+  descendantCount: number;
   visibleSpan: number;
   hiddenDirectCount: number;
   averageConfidence: number;
@@ -313,6 +314,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     const laneId = isMindMap || depth <= 1 ? undefined : `lane:${topAncestor}`;
     if (laneId) laneByName.set(name, laneId);
     const span = directSpanAll.get(name) ?? 0;
+    const descendantCount = Math.max(0, collectDescendants(name, childrenByManager).size - 1);
     const visibleSpan = visibleChildrenByManager.get(name)?.length ?? 0;
     const confidenceValues = confidenceByName.get(name) ?? [];
     return {
@@ -329,6 +331,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       depth,
       levelLabel: levelLabelForPerson(person, depth),
       span,
+      descendantCount,
       visibleSpan,
       hiddenDirectCount: Math.max(0, span - visibleSpan),
       averageConfidence:
@@ -491,9 +494,9 @@ function buildMindMapPositions(
 
   const rootX = 620;
   const rootY = 320;
-  const primaryGapX = 320;
-  const depthGapX = 238;
-  const rowGap = 58;
+  const primaryGapX = 360;
+  const depthGapX = 280;
+  const rowGap = 92;
   positions.set(root, { x: rootX, y: rootY, side: 'root' });
 
   const visibleChildrenOf = (name: string): string[] =>

@@ -25,7 +25,7 @@ export function createEmptyState(): AppState {
           notes: false,
         },
         staleAfterDays: 180,
-        defaultVisibleNodeLimit: 64,
+        defaultVisibleNodeLimit: 32,
         activeCanvasView: 'mindmap',
         orgChartMode: 'formal',
         orgChartExportFormat: 'ppt16x9',
@@ -76,7 +76,7 @@ export function ensureStateShape(state: AppState): AppState {
           notes: state.project.settings?.exportPrivacy?.notes ?? false,
         },
         staleAfterDays: state.project.settings?.staleAfterDays ?? 180,
-        defaultVisibleNodeLimit: state.project.settings?.defaultVisibleNodeLimit ?? 64,
+        defaultVisibleNodeLimit: state.project.settings?.defaultVisibleNodeLimit ?? 32,
         activeCanvasView: normalizeCanvasView(state.project.settings?.activeCanvasView),
         orgChartMode: state.project.settings?.orgChartMode ?? 'formal',
         orgChartExportFormat: state.project.settings?.orgChartExportFormat ?? 'ppt16x9',
@@ -230,7 +230,7 @@ export function createMapBusinessDemoState(): AppState {
 
   state.project.name = '大规模样例：地图平台事业群 mapping';
   state.project.companies = [mainCompany, ...partnerCompanies];
-  state.project.settings.defaultVisibleNodeLimit = 64;
+  state.project.settings.defaultVisibleNodeLimit = 32;
   state.project.settings.reportTemplate = 'executive';
   state.project.settings.activeCanvasView = 'executive';
   state.project.settings.orgChartMode = 'formal';

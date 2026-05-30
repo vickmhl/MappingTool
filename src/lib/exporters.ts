@@ -65,8 +65,8 @@ export function exportOrgGraphPng(
   const activeView = state.project.settings.activeCanvasView;
   const isReport = activeView === 'executive' || activeView === 'mindmap';
   const isMindMap = activeView === 'mindmap' || activeView === 'detail';
-  const nodeWidth = isReport ? (isMindMap ? 214 : 226) : isMindMap ? 202 : 216;
-  const nodeHeight = isReport ? (isMindMap ? 84 : 106) : isMindMap ? 70 : 106;
+  const nodeWidth = isReport ? (isMindMap ? 236 : 226) : isMindMap ? 202 : 216;
+  const nodeHeight = isReport ? (isMindMap ? 94 : 106) : isMindMap ? 70 : 106;
   const modeText = isReport ? '汇报模式' : '招聘模式';
   const styleText = isMindMap ? '树状图' : '常规架构图';
   const bounds = [
@@ -197,7 +197,7 @@ export function exportOrgGraphPng(
       context.font = '12px Microsoft YaHei, sans-serif';
       context.fillText(`一号位 ${displayName}`.slice(0, 19), node.x + 12, node.y + 48);
       context.font = '650 12px Microsoft YaHei, sans-serif';
-      context.fillText(`下属 ${Math.max(node.span, node.visibleSpan)} 人`, node.x + 12, node.y + 68);
+      context.fillText(`下属 ${Math.max(node.descendantCount, node.span, node.visibleSpan)} 人`, node.x + 12, node.y + 68);
       if (!isMindMap || node.depth <= 1) {
         context.fillStyle = '#0b5cff';
         context.fillText(`备注${noteCount > 0 ? ` ${noteCount}` : ''}`, node.x + 12, node.y + nodeHeight - 12);

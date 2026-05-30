@@ -32,7 +32,7 @@ import {
 import { createEmptyState, createMapBusinessDemoState, ensureStateShape } from './data/seed';
 import { buildOrgGraph, layoutIdForCanvasView } from './lib/graph';
 import { importSourceFile } from './lib/importer';
-import { loadPersistedState, persistState } from './lib/idb';
+import { clearPersistedState, loadPersistedState, persistState } from './lib/idb';
 import { addImportResult, updateCandidateStatus } from './lib/merge';
 import { exportEncryptedProjectPackage, importEncryptedProjectPackage } from './lib/projectPackage';
 import { downloadBlob, exportOrgGraphPng, exportReportPptx } from './lib/exporters';
@@ -77,8 +77,8 @@ const defaultFilters: OrgMapFilters = {
   search: '',
   focusPersonName: '',
   minConfidence: 0.72,
-  visibleLimit: 64,
-  maxDepth: 2,
+  visibleLimit: 32,
+  maxDepth: 1,
 };
 
 const canvasPresets: Record<
@@ -89,10 +89,10 @@ const canvasPresets: Record<
     filters: Pick<OrgMapFilters, 'minConfidence' | 'visibleLimit' | 'maxDepth'>;
   }
 > = {
-  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 64, maxDepth: 2 } },
-  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 64, maxDepth: 2 } },
-  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 360, maxDepth: 6 } },
-  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 360, maxDepth: 6 } },
+  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 32, maxDepth: 1 } },
+  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 32, maxDepth: 1 } },
+  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 160, maxDepth: 3 } },
+  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 160, maxDepth: 3 } },
 };
 
 function canvasViewForMode(mode: OrgBusinessMode, style: OrgChartStyle): CanvasViewKey {
@@ -115,6 +115,14 @@ function canvasViewLabel(view: CanvasViewKey): string {
     recruiting: '招聘模式 · 常规架构图',
     detail: '招聘模式 · 树状图',
   }[view];
+}
+
+function isVirtualDemoState(state: AppState): boolean {
+  return (
+    state.sources.length > 0 &&
+    state.sources.every((source) => source.hash === 'virtual-map-business-sample' || source.fileName === 'virtual-map-business-sample.txt') &&
+    state.people.length > 0
+  );
 }
 
 function appendAudit(
@@ -168,12 +176,18 @@ function App() {
   const [toast, setToast] = useState('');
   const [openManualRepair, setOpenManualRepair] = useState(false);
   const saveTimer = useRef<number | undefined>();
+  const demoSession = useRef(false);
 
   useEffect(() => {
     loadPersistedState()
       .then((persisted) => {
         if (!persisted) return;
         const hydrated = ensureStateShape(persisted);
+        if (isVirtualDemoState(hydrated)) {
+          demoSession.current = false;
+          void clearPersistedState();
+          return;
+        }
         setState(hydrated);
         setFilters((current) => ({
           ...current,
@@ -186,6 +200,7 @@ function App() {
 
   useEffect(() => {
     if (!loaded) return;
+    if (demoSession.current || isVirtualDemoState(state)) return;
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       persistState(state).catch((error) =>
@@ -221,6 +236,7 @@ function App() {
     }
 
     if (candidateCount > 0) {
+      demoSession.current = false;
       setToast(`已生成 ${candidateCount} 条候选`);
       setOpenManualRepair(false);
       setActiveView('review');
@@ -232,13 +248,14 @@ function App() {
   }
 
   function loadMapBusinessDemo(): void {
+    demoSession.current = true;
     const demo = createMapBusinessDemoState();
     demo.project.settings.activeCanvasView = 'mindmap';
     demo.project.settings.orgChartMode = 'formal';
-    demo.project.settings.defaultVisibleNodeLimit = 64;
+    demo.project.settings.defaultVisibleNodeLimit = 32;
     demo.project.settings.reportTemplate = 'executive';
     setState(appendAudit(demo, 'demo-loaded', '载入大规模地图业务虚拟样例', { entityCount: demo.people.length, view: 'map' }));
-    setFilters({ ...defaultFilters, visibleLimit: 64, maxDepth: 2, minConfidence: 0.72 });
+    setFilters({ ...defaultFilters, visibleLimit: 32, maxDepth: 1, minConfidence: 0.72 });
     setOpenManualRepair(false);
     setActiveView('map');
     setToast('已载入虚拟演示Demo');
@@ -387,6 +404,8 @@ function App() {
             graph={graph}
             openManualRepair={openManualRepair}
             onManualRepairOpened={() => setOpenManualRepair(false)}
+            onImport={() => setActiveView('import')}
+            loadMapBusinessDemo={loadMapBusinessDemo}
           />
         )}
 
@@ -420,29 +439,38 @@ function ImportView({
 }) {
   return (
     <section className="view-stack">
-      <div className="import-entry-grid">
-        <div className="drop-zone">
-          <Upload size={30} />
+      <div className="import-entry-grid import-entry-compact">
+        <section className="entry-card upload-card">
+          <div className="entry-icon">
+            <Upload size={24} />
+          </div>
           <h2>上传资料</h2>
-          <input
-            type="file"
-            multiple
-            accept=".txt,.md,.pptx,.png,.jpg,.jpeg,.webp,.bmp"
-            onChange={(event) => void onFiles(event.target.files)}
-            aria-label="选择资料文件"
-          />
+          <label className="file-button large-file-button">
+            <Inbox size={16} />
+            选择 TXT / PPTX / 图片
+            <input
+              type="file"
+              multiple
+              accept=".txt,.md,.pptx,.png,.jpg,.jpeg,.webp,.bmp"
+              onChange={(event) => void onFiles(event.target.files)}
+              aria-label="选择资料文件"
+            />
+          </label>
           <label className="toggle-line">
             <input type="checkbox" checked={enableOcr} onChange={(event) => setEnableOcr(event.target.checked)} />
             <span>本地 OCR</span>
           </label>
-        </div>
+        </section>
 
-        <aside className="demo-data-panel">
-          <button type="button" className="primary-button" onClick={loadMapBusinessDemo}>
-            <Network size={16} />
-            虚拟演示Demo
+        <section className="entry-card demo-card">
+          <div className="entry-icon">
+            <Network size={24} />
+          </div>
+          <h2>虚拟演示Demo</h2>
+          <button type="button" className="primary-button demo-entry-button" onClick={loadMapBusinessDemo}>
+            打开演示组织图
           </button>
-        </aside>
+        </section>
       </div>
     </section>
   );
@@ -610,6 +638,8 @@ function OrgMapView({
   graph,
   openManualRepair,
   onManualRepairOpened,
+  onImport,
+  loadMapBusinessDemo,
 }: {
   state: AppState;
   setState: Dispatch<SetStateAction<AppState>>;
@@ -618,6 +648,8 @@ function OrgMapView({
   graph: ReturnType<typeof buildOrgGraph>;
   openManualRepair: boolean;
   onManualRepairOpened: () => void;
+  onImport: () => void;
+  loadMapBusinessDemo: () => void;
 }) {
   const [editMode, setEditMode] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState('');
@@ -635,6 +667,7 @@ function OrgMapView({
   const savedPositions = state.canvasLayouts?.[layoutId]?.nodes ?? {};
   const savedCount = graph.nodes.filter((node) => savedPositions[node.id]).length;
   const selectedGraphNode = graph.nodes.find((node) => node.id === selectedNodeId);
+  const hasOrgData = state.people.length > 0 || state.reportingLines.length > 0 || state.orgUnits.length > 0;
 
   useEffect(() => {
     if (!openManualRepair) return;
@@ -815,7 +848,7 @@ function OrgMapView({
     () =>
       graph.nodes.map((node) => {
         const departmentLabel = node.department ?? node.company ?? '未归属部门';
-        const reportCount = Math.max(node.span, node.visibleSpan);
+        const reportCount = Math.max(node.descendantCount, node.span, node.visibleSpan);
         const noteCount = node.changeCount + (node.averageConfidence < 0.75 ? 1 : 0) + (node.hiddenDirectCount > 0 ? 1 : 0);
         return {
           id: node.id,
@@ -981,6 +1014,23 @@ function OrgMapView({
 
   return (
     <section className="map-layout">
+      {!hasOrgData ? (
+        <section className="empty-map-panel">
+          <Network size={30} />
+          <h2>还没有组织图</h2>
+          <div className="empty-map-actions">
+            <button type="button" className="primary-button" onClick={onImport}>
+              <Upload size={16} />
+              上传资料
+            </button>
+            <button type="button" className="secondary-button" onClick={loadMapBusinessDemo}>
+              <Network size={16} />
+              虚拟演示Demo
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
       <div className="canvas-command-bar" aria-label="画布工具栏">
         <div className="segmented-control" role="group" aria-label="业务模式">
           {([
@@ -1014,7 +1064,7 @@ function OrgMapView({
             </button>
           ))}
         </div>
-        <div className="canvas-actions">
+        <div className="canvas-actions primary-canvas-actions">
           {businessMode === 'recruiting' && (
             <>
               <button
@@ -1031,34 +1081,39 @@ function OrgMapView({
               </button>
             </>
           )}
-          <button type="button" className="secondary-button" onClick={saveVisibleLayout} disabled={!editMode}>
-            <Save size={16} />
-            保存布局
-          </button>
-          <button
-            type="button"
-            className={editMode ? 'secondary-button active-filter' : 'secondary-button'}
-            onClick={() => setEditMode((value) => !value)}
-          >
-            {editMode ? <Lock size={16} /> : <Move size={16} />}
-            {editMode ? '结束编辑' : '编辑布局'}
-          </button>
-          <button
-            type="button"
-            className={showManualRepair ? 'secondary-button active-filter' : 'secondary-button'}
-            onClick={() => setShowManualRepair((value) => !value)}
-          >
-            <Users size={16} />
-            手动补充
-          </button>
           <button type="button" className="secondary-button" onClick={() => flowInstance?.fitView({ duration: 260 })}>
             <Maximize2 size={16} />
             适配画布
           </button>
-          <button type="button" className="secondary-button" onClick={resetLayout} disabled={savedCount === 0}>
-            <RotateCcw size={16} />
-            自动布局
-          </button>
+          <details className="canvas-more-actions">
+            <summary>操作</summary>
+            <div>
+              <button
+                type="button"
+                className={editMode ? 'secondary-button active-filter' : 'secondary-button'}
+                onClick={() => setEditMode((value) => !value)}
+              >
+                {editMode ? <Lock size={16} /> : <Move size={16} />}
+                {editMode ? '结束编辑' : '编辑布局'}
+              </button>
+              <button type="button" className="secondary-button" onClick={saveVisibleLayout} disabled={!editMode}>
+                <Save size={16} />
+                保存布局
+              </button>
+              <button
+                type="button"
+                className={showManualRepair ? 'secondary-button active-filter' : 'secondary-button'}
+                onClick={() => setShowManualRepair((value) => !value)}
+              >
+                <Users size={16} />
+                手动补充
+              </button>
+              <button type="button" className="secondary-button" onClick={resetLayout} disabled={savedCount === 0}>
+                <RotateCcw size={16} />
+                自动布局
+              </button>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -1206,7 +1261,7 @@ function OrgMapView({
             </span>
             <span>
               <strong>下属人数</strong>
-              {Math.max(selectedGraphNode.span, selectedGraphNode.visibleSpan)}
+              {Math.max(selectedGraphNode.descendantCount, selectedGraphNode.span, selectedGraphNode.visibleSpan)}
             </span>
             <span>
               <strong>层级</strong>
@@ -1219,6 +1274,8 @@ function OrgMapView({
             ))}
           </div>
         </section>
+      )}
+        </>
       )}
     </section>
   );
