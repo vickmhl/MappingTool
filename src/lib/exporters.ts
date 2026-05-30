@@ -62,8 +62,25 @@ export function exportOrgGraphPng(
   format: OrgChartExportFormat = state.project.settings.orgChartExportFormat ?? 'ppt16x9',
 ): string {
   const graph = buildOrgGraph(state, filters);
-  const contentWidth = Math.max(1200, ...graph.nodes.map((node) => node.x + 260), ...graph.lanes.map((lane) => lane.x + lane.width + 40), 1200);
-  const contentHeight = Math.max(720, ...graph.nodes.map((node) => node.y + 150), ...graph.lanes.map((lane) => lane.y + lane.height + 40), 720);
+  const activeView = state.project.settings.activeCanvasView;
+  const isReport = activeView === 'executive' || activeView === 'mindmap';
+  const isMindMap = activeView === 'mindmap' || activeView === 'detail';
+  const nodeWidth = isReport ? (isMindMap ? 214 : 226) : isMindMap ? 202 : 216;
+  const nodeHeight = isReport ? (isMindMap ? 84 : 106) : isMindMap ? 70 : 106;
+  const modeText = isReport ? '汇报模式' : '招聘模式';
+  const styleText = isMindMap ? '树状图' : '常规架构图';
+  const bounds = [
+    ...graph.nodes.map((node) => ({ x1: node.x, y1: node.y, x2: node.x + nodeWidth + 34, y2: node.y + nodeHeight + 28 })),
+    ...graph.lanes.map((lane) => ({ x1: lane.x, y1: lane.y, x2: lane.x + lane.width, y2: lane.y + lane.height })),
+  ];
+  const minX = bounds.length ? Math.min(...bounds.map((item) => item.x1)) : 0;
+  const minY = bounds.length ? Math.min(...bounds.map((item) => item.y1)) : 0;
+  const maxX = bounds.length ? Math.max(...bounds.map((item) => item.x2)) : 1120;
+  const maxY = bounds.length ? Math.max(...bounds.map((item) => item.y2)) : 620;
+  const chartPadding = 36;
+  const headerHeight = format === 'longImage' ? 96 : 128;
+  const contentWidth = Math.max(1120, maxX - minX + chartPadding * 2);
+  const contentHeight = Math.max(560, maxY - minY + chartPadding * 2);
   const fixedSize =
     format === 'ppt16x9'
       ? { width: 1920, height: 1080 }
@@ -71,10 +88,10 @@ export function exportOrgGraphPng(
         ? { width: 1754, height: 1240 }
         : undefined;
   const width = fixedSize?.width ?? contentWidth;
-  const height = fixedSize?.height ?? contentHeight;
-  const scale = fixedSize ? Math.min((width - 96) / contentWidth, (height - 150) / contentHeight, 1) : 1;
-  const offsetX = fixedSize ? Math.max(48, (width - contentWidth * scale) / 2) : 0;
-  const offsetY = fixedSize ? 108 : 0;
+  const height = fixedSize?.height ?? contentHeight + headerHeight + 36;
+  const scale = fixedSize ? Math.min((width - 110) / contentWidth, (height - headerHeight - 56) / contentHeight, 1.18) : 1;
+  const offsetX = fixedSize ? Math.max(54, (width - contentWidth * scale) / 2) : 0;
+  const offsetY = headerHeight;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -84,23 +101,27 @@ export function exportOrgGraphPng(
     throw new Error('浏览器不支持 Canvas 导出。');
   }
 
-  context.fillStyle = '#f5f7fb';
+  context.fillStyle = '#ffffff';
   context.fillRect(0, 0, width, height);
-  context.fillStyle = '#1f2329';
-  context.font = '700 26px Microsoft YaHei, sans-serif';
-  context.fillText(state.project.name, 40, 44);
-  context.fillStyle = '#646a73';
-  context.font = '14px Microsoft YaHei, sans-serif';
+  context.fillStyle = '#0f172a';
+  context.fillRect(0, 0, width, fixedSize ? 92 : 74);
+  context.fillStyle = '#ffffff';
+  context.font = '700 30px Microsoft YaHei, sans-serif';
+  context.fillText(state.project.name, 40, 45);
+  context.fillStyle = '#cbd5e1';
+  context.font = '15px Microsoft YaHei, sans-serif';
   context.fillText(
-    `${state.project.settings.orgChartMode === 'formal' ? '正式组织架构图' : '探索画布'} · ${graph.nodes.length} 节点 · ${graph.edges.length} 条关系 · ${format === 'ppt16x9' ? 'PPT 16:9' : format === 'a4Landscape' ? 'A4 横版' : '长图'}`,
+    `${modeText} · ${styleText} · ${graph.nodes.length} 个节点 · ${graph.edges.length} 条关系 · ${format === 'ppt16x9' ? 'PPT 16:9' : format === 'a4Landscape' ? 'A4 横版' : '长图'}`,
     40,
-    70,
+    73,
   );
+  context.fillStyle = '#f8fafc';
+  context.fillRect(0, fixedSize ? 92 : 74, width, height - (fixedSize ? 92 : 74));
 
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
 
   context.save();
-  context.translate(offsetX, offsetY);
+  context.translate(offsetX - (minX - chartPadding) * scale, offsetY - (minY - chartPadding) * scale);
   context.scale(scale, scale);
 
   for (const lane of graph.lanes) {
@@ -124,20 +145,33 @@ export function exportOrgGraphPng(
     const target = nodeById.get(edge.target);
     if (!source || !target) continue;
 
-    context.strokeStyle = edge.confidence < 0.72 ? '#d54941' : '#1677ff';
-    context.lineWidth = 2;
+    context.strokeStyle = edge.confidence < 0.72 ? '#d54941' : isMindMap ? '#1f2329' : '#1677ff';
+    context.lineWidth = isMindMap ? 1.4 : 2;
     if (edge.confidence < 0.75 || edge.relationType === 'dotted-line') context.setLineDash([8, 6]);
     else context.setLineDash([]);
     context.beginPath();
-    const startX = source.x + 116;
-    const startY = source.y + 120;
-    const endX = target.x + 116;
-    const endY = target.y;
-    const midY = startY + Math.max(28, (endY - startY) / 2);
-    context.moveTo(startX, startY);
-    context.lineTo(startX, midY);
-    context.lineTo(endX, midY);
-    context.lineTo(endX, endY);
+    if (isMindMap) {
+      const side = target.mindMapSide === 'left' ? 'left' : 'right';
+      const startX = source.x + (side === 'left' ? 0 : nodeWidth);
+      const startY = source.y + nodeHeight / 2;
+      const endX = target.x + (side === 'left' ? nodeWidth : 0);
+      const endY = target.y + nodeHeight / 2;
+      const midX = (startX + endX) / 2;
+      context.moveTo(startX, startY);
+      context.lineTo(midX, startY);
+      context.lineTo(midX, endY);
+      context.lineTo(endX, endY);
+    } else {
+      const startX = source.x + nodeWidth / 2;
+      const startY = source.y + nodeHeight;
+      const endX = target.x + nodeWidth / 2;
+      const endY = target.y;
+      const midY = startY + Math.max(28, (endY - startY) / 2);
+      context.moveTo(startX, startY);
+      context.lineTo(startX, midY);
+      context.lineTo(endX, midY);
+      context.lineTo(endX, endY);
+    }
     context.stroke();
   }
   context.setLineDash([]);
@@ -147,27 +181,45 @@ export function exportOrgGraphPng(
     context.strokeStyle = node.status === 'left' ? '#d54941' : node.isFocus ? '#0b5cff' : node.changeCount > 0 ? '#efd99a' : '#c7d6e8';
     context.lineWidth = 1.5;
     context.beginPath();
-    context.roundRect(node.x, node.y, 232, 124, 8);
+    context.roundRect(node.x, node.y, nodeWidth, nodeHeight, isMindMap && node.depth >= 2 ? 0 : 8);
     context.fill();
     context.stroke();
 
-    context.fillStyle = '#1f2329';
-    context.font = '700 17px Microsoft YaHei, sans-serif';
-    context.fillText(anonymize ? maskName(node.label) : node.label, node.x + 14, node.y + 28);
-    context.fillStyle = '#1677ff';
-    context.font = '11px Microsoft YaHei, sans-serif';
-    context.fillText(node.levelLabel, node.x + 152, node.y + 28);
-    context.font = '13px Microsoft YaHei, sans-serif';
-    context.fillStyle = '#4e5969';
-    context.fillText((node.title ?? '职位待确认').slice(0, 18), node.x + 14, node.y + 52);
-    context.fillStyle = '#646a73';
     const orgText = shouldMaskCompanies(state) ? '组织已脱敏' : node.department ?? node.company ?? '组织待确认';
-    context.fillText(orgText.slice(0, 18), node.x + 14, node.y + 72);
-    context.fillStyle = node.isTalent ? '#00a870' : '#8a9a95';
-    context.font = '12px Microsoft YaHei, sans-serif';
-    context.fillText(`${node.isTalent ? '重点人才 · ' : ''}${freshnessText(node.updatedAt)}`, node.x + 14, node.y + 94);
-    context.fillStyle = '#4e5969';
-    context.fillText(`${Math.round(node.averageConfidence * 100) || '--'}% 证据 · ${node.visibleSpan}/${node.span} 下属${node.hiddenDirectCount ? ` · +${node.hiddenDirectCount}` : ''}`, node.x + 14, node.y + 114);
+    const displayName = anonymize ? maskName(node.label) : node.label;
+    const noteCount = node.changeCount + (node.hiddenDirectCount > 0 ? 1 : 0) + (node.averageConfidence < 0.75 ? 1 : 0);
+
+    if (isReport) {
+      context.fillStyle = '#1f2329';
+      context.font = `700 ${isMindMap ? 14 : 16}px Microsoft YaHei, sans-serif`;
+      context.fillText(orgText.slice(0, isMindMap ? 14 : 16), node.x + 12, node.y + 25);
+      context.fillStyle = '#4e5969';
+      context.font = '12px Microsoft YaHei, sans-serif';
+      context.fillText(`一号位 ${displayName}`.slice(0, 19), node.x + 12, node.y + 48);
+      context.font = '650 12px Microsoft YaHei, sans-serif';
+      context.fillText(`下属 ${Math.max(node.span, node.visibleSpan)} 人`, node.x + 12, node.y + 68);
+      if (!isMindMap || node.depth <= 1) {
+        context.fillStyle = '#0b5cff';
+        context.fillText(`备注${noteCount > 0 ? ` ${noteCount}` : ''}`, node.x + 12, node.y + nodeHeight - 12);
+      }
+    } else {
+      context.fillStyle = '#1f2329';
+      context.font = '700 15px Microsoft YaHei, sans-serif';
+      context.fillText(displayName.slice(0, 16), node.x + 12, node.y + 25);
+      context.font = '12px Microsoft YaHei, sans-serif';
+      context.fillStyle = '#4e5969';
+      context.fillText((node.title ?? '职位待确认').slice(0, 18), node.x + 12, node.y + 48);
+      context.fillStyle = '#646a73';
+      context.fillText(orgText.slice(0, 18), node.x + 12, node.y + 68);
+      if (!isMindMap) {
+        context.fillStyle = node.isTalent ? '#00a870' : '#4e5969';
+        context.fillText(
+          `${node.isTalent ? '重点 · ' : ''}${node.visibleSpan}/${node.span} 下属${node.hiddenDirectCount ? ` · +${node.hiddenDirectCount}` : ''}`,
+          node.x + 12,
+          node.y + 92,
+        );
+      }
+    }
   }
   context.restore();
 
@@ -192,58 +244,76 @@ export async function exportReportPptx(
     headFontFace: 'Microsoft YaHei',
     bodyFontFace: 'Microsoft YaHei',
   };
+  const pendingCount = state.candidates.filter((candidate) => candidate.status === 'pending').length;
+  const deck = {
+    bg: 'F7F9FC',
+    ink: '172033',
+    muted: '5B667A',
+    blue: '1677FF',
+    softBlue: 'EAF2FF',
+    green: '00A870',
+    line: 'DDE6F3',
+    panel: 'FFFFFF',
+  };
+  const addSlideTitle = (slide: any, eyebrow: string, title: string, subtitle?: string) => {
+    slide.background = { color: deck.bg };
+    slide.addText(eyebrow, {
+      x: 0.55,
+      y: 0.28,
+      w: 2.3,
+      h: 0.24,
+      fontSize: 8,
+      bold: true,
+      color: deck.blue,
+      fill: { color: deck.softBlue },
+      align: 'center',
+      margin: 0.03,
+    });
+    slide.addText(title, { x: 0.55, y: 0.63, w: 8.6, h: 0.42, fontSize: 20, bold: true, color: deck.ink });
+    if (subtitle) {
+      slide.addText(subtitle, { x: 0.55, y: 1.05, w: 11.8, h: 0.28, fontSize: 9, color: deck.muted, fit: 'shrink' });
+    }
+  };
+  const addMetricCard = (slide: any, x: number, label: string, value: string, accent = deck.blue) => {
+    slide.addText(value, {
+      x,
+      y: 1.3,
+      w: 2.25,
+      h: 0.45,
+      fontSize: 18,
+      bold: true,
+      color: deck.ink,
+      fill: { color: deck.panel },
+      line: { color: deck.line, pt: 0.7 },
+      margin: 0.08,
+    });
+    slide.addText(label, { x, y: 1.76, w: 2.25, h: 0.22, fontSize: 8, bold: true, color: accent, margin: 0.02 });
+  };
 
   const cover = pptx.addSlide();
-  cover.background = { color: 'F8FAF9' };
-  cover.addText(state.project.name, {
-    x: 0.6,
-    y: 0.6,
-    w: 11.8,
-    h: 0.6,
-    fontFace: 'Microsoft YaHei',
-    fontSize: 26,
-    bold: true,
-    color: '10201C',
+  addSlideTitle(cover, 'LOCAL ORG MAPPING', state.project.name, maskKnownPeopleText(state, narrative.headline));
+  addMetricCard(cover, 0.55, shouldMaskCompanies(state) ? '公司已脱敏' : '覆盖公司', shouldMaskCompanies(state) ? '已脱敏' : `${state.project.companies.length} 家`);
+  addMetricCard(cover, 3.05, '人员', `${state.people.length} 人`, deck.green);
+  addMetricCard(cover, 5.55, '汇报线', `${state.reportingLines.length} 条`);
+  addMetricCard(cover, 8.05, '准备度', `${narrative.metrics.readinessScore} 分`, narrative.metrics.readinessScore >= 80 ? deck.green : 'D99000');
+  addMetricCard(cover, 10.55, '待确认', `${pendingCount} 条`, pendingCount > 0 ? 'D54941' : deck.green);
+  cover.addText('', {
+    x: 0.48,
+    y: 2.18,
+    w: 12.35,
+    h: 4.66,
+    fill: { color: deck.panel },
+    line: { color: deck.line, pt: 1 },
+    margin: 0,
   });
-  cover.addText(
-    [
-      `公司：${shouldMaskCompanies(state) ? '已脱敏' : state.project.companies.length}`,
-      `人员：${state.people.length}`,
-      `汇报线：${state.reportingLines.length}`,
-      `准备度：${narrative.metrics.readinessScore}分`,
-      `待确认：${state.candidates.filter((candidate) => candidate.status === 'pending').length}`,
-    ].join('  |  '),
-    {
-      x: 0.6,
-      y: 1.28,
-      w: 11.8,
-      h: 0.34,
-      fontSize: 12,
-      color: '48635A',
-    },
-  );
-  cover.addImage({ data: graphPng, x: 0.55, y: 1.85, w: 12.25, h: 5.2 });
+  cover.addImage({ data: graphPng, x: 0.65, y: 2.35, w: 12.0, h: 4.33 });
 
   const summarySlide = pptx.addSlide();
-  summarySlide.background = { color: 'FFFFFF' };
-  summarySlide.addText('管理结论与下一步', {
-    x: 0.6,
-    y: 0.45,
-    w: 8,
-    h: 0.4,
-    fontSize: 20,
-    bold: true,
-    color: '10201C',
-  });
-  summarySlide.addText(maskKnownPeopleText(state, narrative.headline), {
-    x: 0.6,
-    y: 0.95,
-    w: 12,
-    h: 0.45,
-    fontSize: 14,
-    bold: true,
-    color: '24423A',
-  });
+  addSlideTitle(summarySlide, 'EXECUTIVE SUMMARY', '管理结论与下一步', maskKnownPeopleText(state, narrative.headline));
+  addMetricCard(summarySlide, 0.55, '汇报准备度', `${narrative.metrics.readinessScore} 分`);
+  addMetricCard(summarySlide, 3.05, '覆盖度', `${narrative.metrics.coverageScore} 分`);
+  addMetricCard(summarySlide, 5.55, '可信度', `${narrative.metrics.confidenceScore} 分`, deck.green);
+  addMetricCard(summarySlide, 8.05, '时效性', `${narrative.metrics.freshnessScore} 分`, 'D99000');
   summarySlide.addTable(
     [
       ['指标', '结果', '口径'],
@@ -254,38 +324,45 @@ export async function exportReportPptx(
     ] as any,
     {
       x: 0.6,
-      y: 1.58,
+      y: 2.26,
       w: 5.9,
-      h: 2.0,
-      border: { type: 'solid', color: 'D6E0DC', pt: 0.7 },
+      h: 1.65,
+      border: { type: 'solid', color: deck.line, pt: 0.7 },
       fontFace: 'Microsoft YaHei',
       fontSize: 9,
-      color: '10201C',
+      color: deck.ink,
+      fill: { color: deck.panel },
       margin: 0.06,
     },
   );
-  summarySlide.addText('关键结论', { x: 6.8, y: 1.58, w: 2.4, h: 0.28, fontSize: 13, bold: true, color: '10201C' });
+  summarySlide.addText('关键结论', { x: 6.8, y: 2.26, w: 2.4, h: 0.28, fontSize: 13, bold: true, color: deck.ink });
   summarySlide.addText(narrative.summaryBullets.map((item) => `• ${maskKnownPeopleText(state, item)}`).join('\n'), {
     x: 6.8,
-    y: 1.95,
+    y: 2.62,
     w: 5.4,
-    h: 1.45,
+    h: 1.3,
     fontSize: 10,
     color: '354B45',
+    fill: { color: deck.panel },
+    line: { color: deck.line, pt: 0.7 },
     breakLine: false,
     fit: 'shrink',
+    margin: 0.1,
   });
-  summarySlide.addText('建议动作', { x: 0.6, y: 4.08, w: 2.4, h: 0.28, fontSize: 13, bold: true, color: '10201C' });
+  summarySlide.addText('建议动作', { x: 0.6, y: 4.25, w: 2.4, h: 0.28, fontSize: 13, bold: true, color: deck.ink });
   summarySlide.addText(narrative.nextActions.map((item) => `• ${maskKnownPeopleText(state, item)}`).join('\n'), {
     x: 0.6,
-    y: 4.45,
+    y: 4.6,
     w: 5.9,
     h: 1.35,
     fontSize: 10,
     color: '354B45',
+    fill: { color: deck.panel },
+    line: { color: deck.line, pt: 0.7 },
     fit: 'shrink',
+    margin: 0.1,
   });
-  summarySlide.addText('业务解释', { x: 6.8, y: 4.08, w: 2.4, h: 0.28, fontSize: 13, bold: true, color: '10201C' });
+  summarySlide.addText('业务解释', { x: 6.8, y: 4.25, w: 2.4, h: 0.28, fontSize: 13, bold: true, color: deck.ink });
   summarySlide.addTable(
     [
       ['信号', '解释'],
@@ -296,28 +373,20 @@ export async function exportReportPptx(
     ] as any,
     {
       x: 6.8,
-      y: 4.45,
+      y: 4.6,
       w: 5.5,
       h: 1.65,
-      border: { type: 'solid', color: 'D6E0DC', pt: 0.7 },
+      border: { type: 'solid', color: deck.line, pt: 0.7 },
       fontFace: 'Microsoft YaHei',
       fontSize: 8,
-      color: '10201C',
+      color: deck.ink,
+      fill: { color: deck.panel },
       margin: 0.05,
     },
   );
 
   const evidenceSlide = pptx.addSlide();
-  evidenceSlide.background = { color: 'FFFFFF' };
-  evidenceSlide.addText('证据健康度与组织风险', {
-    x: 0.6,
-    y: 0.45,
-    w: 8,
-    h: 0.4,
-    fontSize: 20,
-    bold: true,
-    color: '10201C',
-  });
+  addSlideTitle(evidenceSlide, 'DATA QUALITY', '证据健康度与组织风险', '用于判断这份 mapping 是否适合进入管理汇报或高招动作。');
   const evidenceRows = [
     ['强证据', `${narrative.metrics.strongEvidenceCount}`, '置信度不低于85%的证据片段'],
     ['弱信号', `${narrative.metrics.weakSignalCount}`, '弱证据与弱候选合计'],
@@ -327,16 +396,17 @@ export async function exportReportPptx(
   ];
   evidenceSlide.addTable([['维度', '数量', '解释'], ...evidenceRows] as any, {
     x: 0.6,
-    y: 1.05,
+    y: 1.55,
     w: 6,
     h: 2.8,
-    border: { type: 'solid', color: 'D6E0DC', pt: 0.7 },
+    border: { type: 'solid', color: deck.line, pt: 0.7 },
     fontFace: 'Microsoft YaHei',
     fontSize: 9,
-    color: '10201C',
+    color: deck.ink,
+    fill: { color: deck.panel },
     margin: 0.06,
   });
-  evidenceSlide.addText('重点管理跨度', { x: 7.0, y: 1.05, w: 3, h: 0.3, fontSize: 13, bold: true, color: '10201C' });
+  evidenceSlide.addText('重点管理跨度', { x: 7.0, y: 1.55, w: 3, h: 0.3, fontSize: 13, bold: true, color: deck.ink });
   evidenceSlide.addTable(
     [
       ['负责人', '直属下级', '部门'],
@@ -348,17 +418,18 @@ export async function exportReportPptx(
     ] as any,
     {
       x: 7,
-      y: 1.45,
+      y: 1.95,
       w: 5.2,
       h: 2.4,
-      border: { type: 'solid', color: 'D6E0DC', pt: 0.7 },
+      border: { type: 'solid', color: deck.line, pt: 0.7 },
       fontFace: 'Microsoft YaHei',
       fontSize: 9,
-      color: '10201C',
+      color: deck.ink,
+      fill: { color: deck.panel },
       margin: 0.06,
     },
   );
-  evidenceSlide.addText('专业口径', { x: 0.6, y: 4.25, w: 2.6, h: 0.3, fontSize: 13, bold: true, color: '10201C' });
+  evidenceSlide.addText('专业口径', { x: 0.6, y: 4.55, w: 2.6, h: 0.3, fontSize: 13, bold: true, color: deck.ink });
   const weights = narrative.metrics.normalizedWeights;
   evidenceSlide.addText(
     [
@@ -369,26 +440,20 @@ export async function exportReportPptx(
     ].join('\n'),
     {
       x: 0.6,
-      y: 4.65,
+      y: 4.9,
       w: 11.6,
       h: 1.2,
       fontSize: 10,
       color: '354B45',
+      fill: { color: deck.panel },
+      line: { color: deck.line, pt: 0.7 },
       fit: 'shrink',
+      margin: 0.1,
     },
   );
 
   const peopleSlide = pptx.addSlide();
-  peopleSlide.background = { color: 'FFFFFF' };
-  peopleSlide.addText('关键人员清单', {
-    x: 0.6,
-    y: 0.45,
-    w: 8,
-    h: 0.4,
-    fontSize: 20,
-    bold: true,
-    color: '10201C',
-  });
+  addSlideTitle(peopleSlide, 'TALENT LIST', '关键人员清单', '优先展示可用于高招 mapping 和业务复核的人员信息。');
   const peopleRows = state.people.slice(0, 14).map((person) => [
     displayPerson(person, anonymize),
     displayCompany(state, person.company),
@@ -398,28 +463,19 @@ export async function exportReportPptx(
   ]);
   peopleSlide.addTable([['姓名', '公司', '部门', '岗位', '状态'], ...peopleRows] as any, {
     x: 0.6,
-    y: 1.05,
+    y: 1.42,
     w: 12,
-    h: 5.8,
-    border: { type: 'solid', color: 'D6E0DC', pt: 0.7 },
+    h: 5.45,
+    border: { type: 'solid', color: deck.line, pt: 0.7 },
     fontFace: 'Microsoft YaHei',
     fontSize: 9,
-    color: '10201C',
-    fill: { color: 'FFFFFF' },
+    color: deck.ink,
+    fill: { color: deck.panel },
     margin: 0.06,
   });
 
   const changesSlide = pptx.addSlide();
-  changesSlide.background = { color: 'FFFFFF' };
-  changesSlide.addText('近期变更与风险', {
-    x: 0.6,
-    y: 0.45,
-    w: 8,
-    h: 0.4,
-    fontSize: 20,
-    bold: true,
-    color: '10201C',
-  });
+  addSlideTitle(changesSlide, 'CHANGE LOG', '近期变更与风险', '用于解释组织变化、离职、调岗和信息冲突。');
   const changeRows = state.changeEvents.slice(0, 18).map((event) => [
     event.date ?? event.createdAt.slice(0, 10),
     anonymize && event.personName ? maskName(event.personName) : event.personName ?? '-',
@@ -429,13 +485,14 @@ export async function exportReportPptx(
   ]);
   changesSlide.addTable([['日期', '人员', '类型', '说明', '来源'], ...changeRows] as any, {
     x: 0.6,
-    y: 1.05,
+    y: 1.42,
     w: 12,
-    h: 5.8,
-    border: { type: 'solid', color: 'D6E0DC', pt: 0.7 },
+    h: 5.45,
+    border: { type: 'solid', color: deck.line, pt: 0.7 },
     fontFace: 'Microsoft YaHei',
     fontSize: 9,
-    color: '10201C',
+    color: deck.ink,
+    fill: { color: deck.panel },
     margin: 0.06,
   });
 

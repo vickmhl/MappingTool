@@ -77,8 +77,8 @@ const defaultFilters: OrgMapFilters = {
   search: '',
   focusPersonName: '',
   minConfidence: 0.72,
-  visibleLimit: 96,
-  maxDepth: 3,
+  visibleLimit: 64,
+  maxDepth: 2,
 };
 
 const canvasPresets: Record<
@@ -89,8 +89,8 @@ const canvasPresets: Record<
     filters: Pick<OrgMapFilters, 'minConfidence' | 'visibleLimit' | 'maxDepth'>;
   }
 > = {
-  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 96, maxDepth: 3 } },
-  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 96, maxDepth: 3 } },
+  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 64, maxDepth: 2 } },
+  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 64, maxDepth: 2 } },
   recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 360, maxDepth: 6 } },
   detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 360, maxDepth: 6 } },
 };
@@ -233,8 +233,12 @@ function App() {
 
   function loadMapBusinessDemo(): void {
     const demo = createMapBusinessDemoState();
+    demo.project.settings.activeCanvasView = 'mindmap';
+    demo.project.settings.orgChartMode = 'formal';
+    demo.project.settings.defaultVisibleNodeLimit = 64;
+    demo.project.settings.reportTemplate = 'executive';
     setState(appendAudit(demo, 'demo-loaded', '载入大规模地图业务虚拟样例', { entityCount: demo.people.length, view: 'map' }));
-    setFilters({ ...defaultFilters, visibleLimit: 96, maxDepth: 3, minConfidence: 0.72 });
+    setFilters({ ...defaultFilters, visibleLimit: 64, maxDepth: 2, minConfidence: 0.72 });
     setOpenManualRepair(false);
     setActiveView('map');
     setToast('已载入虚拟演示Demo');
@@ -349,13 +353,6 @@ function App() {
           })}
         </nav>
 
-        <div className="privacy-box">
-          <ShieldCheck size={18} />
-          <div>
-            <strong>本地处理</strong>
-            <span>资料保存在浏览器 IndexedDB。</span>
-          </div>
-        </div>
       </aside>
 
       <main className="workspace">
@@ -625,6 +622,7 @@ function OrgMapView({
   const [editMode, setEditMode] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [showManualRepair, setShowManualRepair] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [manualPerson, setManualPerson] = useState({ name: '', title: '', department: '', company: '' });
   const [manualLine, setManualLine] = useState({ manager: '', subordinate: '' });
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -829,6 +827,7 @@ function OrgMapView({
                   'flow-node',
                   isReportMode ? 'business-report' : 'business-recruiting',
                   isTree ? 'mindmap' : 'formal',
+                  isTree && node.mindMapSide ? `mindmap-${node.mindMapSide}` : '',
                   isTree && node.depth === 0 ? 'mindmap-root' : '',
                   isTree && node.depth === 1 ? 'mindmap-branch' : '',
                   isTree && node.depth >= 2 ? 'mindmap-leaf' : '',
@@ -849,10 +848,9 @@ function OrgMapView({
                   <>
                     <div className="flow-node-top">
                       <strong>{departmentLabel}</strong>
-                      <small>L{node.depth}</small>
                     </div>
-                    <span>一号位：{node.label}</span>
-                    <em>{reportCount} 人</em>
+                    <span>一号位 {node.label}</span>
+                    <em>下属 {reportCount} 人</em>
                     <button
                       type="button"
                       className="node-note-button"
@@ -873,9 +871,10 @@ function OrgMapView({
                     <span>{node.title ?? '岗位待确认'}</span>
                     <em>{node.department ?? node.company ?? '组织待确认'}</em>
                     <div className="flow-node-meta">
-                      <b>{Math.round(node.averageConfidence * 100)}%</b>
+                      {node.isTalent && <b className="talent-pill">重点</b>}
                       {node.span > 0 && <b>{node.visibleSpan}/{node.span} 下属</b>}
                       {node.hiddenDirectCount > 0 && <b>+{node.hiddenDirectCount} 收起</b>}
+                      {node.changeCount > 0 && <b>变更 {node.changeCount}</b>}
                     </div>
                   </>
                 )}
@@ -1063,7 +1062,7 @@ function OrgMapView({
         </div>
       </div>
 
-      <div className="map-controls">
+      <div className="map-controls primary-map-controls">
         <label>
           公司
           <select value={filters.company} onChange={(event) => setFilters({ ...filters, company: event.target.value })}>
@@ -1087,6 +1086,17 @@ function OrgMapView({
             onChange={(event) => setFilters({ ...filters, focusPersonName: event.target.value })}
           />
         </label>
+        <button
+          type="button"
+          className={showAdvancedFilters ? 'secondary-button active-filter' : 'secondary-button'}
+          onClick={() => setShowAdvancedFilters((value) => !value)}
+        >
+          筛选
+        </button>
+      </div>
+
+      {showAdvancedFilters && (
+        <div className="map-controls advanced-map-controls">
         <label>
           置信度 {Math.round(filters.minConfidence * 100)}%
           <input
@@ -1118,7 +1128,8 @@ function OrgMapView({
             onChange={(event) => setFilters({ ...filters, maxDepth: Number(event.target.value) })}
           />
         </label>
-      </div>
+        </div>
+      )}
 
       {showManualRepair && (
         <section className="tool-panel manual-repair-panel">

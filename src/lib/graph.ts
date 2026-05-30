@@ -491,44 +491,74 @@ function buildMindMapPositions(
 
   const rootX = 620;
   const rootY = 320;
-  const leftX = 305;
-  const rightX = 915;
-  const childGapX = 238;
-  const rowGap = 104;
+  const primaryGapX = 320;
+  const depthGapX = 238;
+  const rowGap = 58;
   positions.set(root, { x: rootX, y: rootY, side: 'root' });
 
-  const directChildren = sortNamesByPerson(
-    (childrenByManager.get(root) ?? []).filter((child) => visibleNames.has(child)),
-    peopleByName,
-    depthByName,
-  );
-  const leftChildren = directChildren.filter((_, index) => index % 2 === 0);
-  const rightChildren = directChildren.filter((_, index) => index % 2 === 1);
+  const visibleChildrenOf = (name: string): string[] =>
+    sortNamesByPerson(
+      (childrenByManager.get(name) ?? []).filter((child) => visibleNames.has(child)),
+      peopleByName,
+      depthByName,
+    );
 
-  const placeBranch = (branchRoots: string[], side: 'left' | 'right') => {
+  const subtreeUnits = (name: string, ancestry: Set<string>): number => {
+    if (ancestry.has(name)) return 1;
+    const nextAncestry = new Set(ancestry);
+    nextAncestry.add(name);
+    const children = visibleChildrenOf(name).filter((child) => !nextAncestry.has(child));
+    if (children.length === 0) return 1;
+    return Math.max(
+      1,
+      children.reduce((sum, child) => sum + subtreeUnits(child, nextAncestry), 0),
+    );
+  };
+
+  const placeSubtree = (name: string, side: 'left' | 'right', depth: number, y: number, ancestry: Set<string>) => {
+    if (ancestry.has(name)) return;
     const direction = side === 'left' ? -1 : 1;
-    const baseX = side === 'left' ? leftX : rightX;
-    branchRoots.forEach((name, index) => {
-      const band = Math.ceil(index / 2);
-      const y = rootY + (index % 2 === 0 ? 1 : -1) * band * rowGap;
-      positions.set(name, { x: baseX, y, side });
-      const children = sortNamesByPerson(
-        (childrenByManager.get(name) ?? []).filter((child) => visibleNames.has(child)),
-        peopleByName,
-        depthByName,
-      ).slice(0, 6);
-      children.forEach((child, childIndex) => {
-        positions.set(child, {
-          x: baseX + direction * childGapX,
-          y: y - ((children.length - 1) * 42) / 2 + childIndex * 42,
-          side,
-        });
-      });
+    positions.set(name, {
+      x: rootX + direction * (primaryGapX + Math.max(0, depth - 1) * depthGapX),
+      y,
+      side,
+    });
+
+    const nextAncestry = new Set(ancestry);
+    nextAncestry.add(name);
+    const children = visibleChildrenOf(name).filter((child) => !nextAncestry.has(child));
+    const childUnits = children.map((child) => subtreeUnits(child, nextAncestry));
+    const totalUnits = childUnits.reduce((sum, value) => sum + value, 0);
+    let cursorY = y - ((totalUnits - 1) * rowGap) / 2;
+
+    children.forEach((child, index) => {
+      const units = childUnits[index] ?? 1;
+      const childY = cursorY + ((units - 1) * rowGap) / 2;
+      placeSubtree(child, side, depth + 1, childY, nextAncestry);
+      cursorY += units * rowGap;
     });
   };
 
-  placeBranch(leftChildren, 'left');
-  placeBranch(rightChildren, 'right');
+  const directChildren = visibleChildrenOf(root);
+  const primaryBranches = directChildren.length > 0 ? directChildren : orderedRoots.filter((name) => name !== root);
+  const leftBranches = primaryBranches.filter((_, index) => index % 2 === 0);
+  const rightBranches = primaryBranches.filter((_, index) => index % 2 === 1);
+
+  const placeBranchGroup = (branchRoots: string[], side: 'left' | 'right') => {
+    const units = branchRoots.map((name) => subtreeUnits(name, new Set([root])));
+    const totalUnits = units.reduce((sum, value) => sum + value, 0);
+    let cursorY = rootY - ((totalUnits - 1) * rowGap) / 2;
+
+    branchRoots.forEach((name, index) => {
+      const branchUnits = units[index] ?? 1;
+      const branchY = cursorY + ((branchUnits - 1) * rowGap) / 2;
+      placeSubtree(name, side, 1, branchY, new Set([root]));
+      cursorY += branchUnits * rowGap;
+    });
+  };
+
+  placeBranchGroup(leftBranches, 'left');
+  placeBranchGroup(rightBranches, 'right');
 
   let fallbackRow = 0;
   for (const person of people) {
@@ -537,9 +567,9 @@ function buildMindMapPositions(
     const depth = depthByName.get(name) ?? 0;
     const side = fallbackRow % 2 === 0 ? 'left' : 'right';
     const direction = side === 'left' ? -1 : 1;
-      positions.set(name, {
-      x: (side === 'left' ? leftX : rightX) + direction * (childGapX + Math.max(0, depth - 2) * 170),
-      y: rootY + 170 + fallbackRow * 70,
+    positions.set(name, {
+      x: rootX + direction * (primaryGapX + Math.max(0, depth) * depthGapX),
+      y: rootY + 170 + fallbackRow * 64,
       side,
     });
     fallbackRow += 1;

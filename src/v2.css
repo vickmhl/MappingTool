@@ -34,14 +34,26 @@
 
 .canvas-command-bar {
   grid-template-columns: auto auto minmax(280px, 1fr);
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .canvas-actions {
   justify-content: flex-end;
 }
 
-.map-controls {
-  grid-template-columns: 150px minmax(170px, 1fr) 140px minmax(160px, 1fr) 112px 96px;
+.primary-map-controls {
+  grid-template-columns: 170px minmax(220px, 1fr) 180px auto;
+  align-items: end;
+}
+
+.advanced-map-controls {
+  grid-template-columns: minmax(220px, 1fr) 130px 110px;
+  background: #ffffff;
+  border: 1px solid #dbe5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
 }
 
 .flow-surface {
@@ -49,11 +61,22 @@
   min-height: 560px;
 }
 
+.flow-surface.mindmap-surface {
+  height: calc(100vh - 205px);
+  min-height: 560px;
+  background:
+    linear-gradient(#eef2f7 1px, transparent 1px),
+    linear-gradient(90deg, #eef2f7 1px, transparent 1px),
+    #ffffff;
+  background-size: 28px 28px;
+}
+
 .flow-node.business-report {
-  width: 230px;
-  min-height: 112px;
+  width: 226px;
+  min-height: 106px;
   padding: 12px 14px;
   border-top: 3px solid #1677ff;
+  background: #ffffff;
 }
 
 .flow-node.business-report strong {
@@ -66,14 +89,60 @@
   font-size: 13px;
 }
 
+.flow-node.business-report em {
+  font-weight: 650;
+}
+
 .flow-node.business-report.selected {
   outline: 2px solid #1677ff;
   outline-offset: 2px;
 }
 
+.flow-node.business-report.mindmap {
+  width: 214px;
+  min-height: 84px;
+  border-top: 0;
+  border-color: #d9dde5;
+  box-shadow: 0 3px 10px rgb(31 35 41 / 6%);
+}
+
+.flow-node.business-report.mindmap-root {
+  min-height: 92px;
+  border: 1.5px solid #1f2329;
+  box-shadow: 0 0 0 4px #ffffff;
+}
+
+.flow-node.business-report.mindmap-left {
+  text-align: right;
+  border-right: 3px solid #1f2329;
+}
+
+.flow-node.business-report.mindmap-right {
+  border-left: 3px solid #1f2329;
+}
+
+.flow-node.business-report.mindmap-left .flow-node-top {
+  justify-content: flex-end;
+}
+
+.flow-node.business-report.mindmap-leaf {
+  min-height: 50px;
+  border-top: 0;
+  border-bottom: 1px solid #1f2329;
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .flow-node.business-recruiting {
   width: 216px;
   min-height: 106px;
+}
+
+.flow-node.business-recruiting .flow-node-meta .talent-pill {
+  color: #0f6b4f;
+  background: #e7f8f1;
 }
 
 .node-note-button {
@@ -132,7 +201,8 @@
 @media (max-width: 1100px) {
   .import-entry-grid,
   .canvas-command-bar,
-  .map-controls,
+  .primary-map-controls,
+  .advanced-map-controls,
   .export-grid {
     grid-template-columns: 1fr;
   }

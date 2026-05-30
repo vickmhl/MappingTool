@@ -25,11 +25,11 @@ export function createEmptyState(): AppState {
           notes: false,
         },
         staleAfterDays: 180,
-        defaultVisibleNodeLimit: 96,
-        activeCanvasView: 'executive',
+        defaultVisibleNodeLimit: 64,
+        activeCanvasView: 'mindmap',
         orgChartMode: 'formal',
         orgChartExportFormat: 'ppt16x9',
-        reportTemplate: 'recruiting',
+        reportTemplate: 'executive',
         sensitivityLevel: 'internal',
         sourceCredibility: {
           text: 86,
@@ -76,11 +76,11 @@ export function ensureStateShape(state: AppState): AppState {
           notes: state.project.settings?.exportPrivacy?.notes ?? false,
         },
         staleAfterDays: state.project.settings?.staleAfterDays ?? 180,
-        defaultVisibleNodeLimit: state.project.settings?.defaultVisibleNodeLimit ?? 300,
+        defaultVisibleNodeLimit: state.project.settings?.defaultVisibleNodeLimit ?? 64,
         activeCanvasView: normalizeCanvasView(state.project.settings?.activeCanvasView),
         orgChartMode: state.project.settings?.orgChartMode ?? 'formal',
         orgChartExportFormat: state.project.settings?.orgChartExportFormat ?? 'ppt16x9',
-        reportTemplate: state.project.settings?.reportTemplate ?? 'recruiting',
+        reportTemplate: state.project.settings?.reportTemplate ?? 'executive',
         sensitivityLevel: state.project.settings?.sensitivityLevel ?? 'internal',
         sourceCredibility: {
           text: state.project.settings?.sourceCredibility?.text ?? 86,
@@ -230,7 +230,7 @@ export function createMapBusinessDemoState(): AppState {
 
   state.project.name = '大规模样例：地图平台事业群 mapping';
   state.project.companies = [mainCompany, ...partnerCompanies];
-  state.project.settings.defaultVisibleNodeLimit = 96;
+  state.project.settings.defaultVisibleNodeLimit = 64;
   state.project.settings.reportTemplate = 'executive';
   state.project.settings.activeCanvasView = 'executive';
   state.project.settings.orgChartMode = 'formal';
