@@ -1236,13 +1236,13 @@ button {
 }
 
 .gap-row.p0 > span,
-.priority-dot.? {
+.priority-dot.高 {
   color: #9b3129;
   background: #ffe8e5;
 }
 
 .gap-row.p2 > span,
-.priority-dot.? {
+.priority-dot.低 {
   color: #1d4ed8;
   background: var(--color-primary-soft);
 }

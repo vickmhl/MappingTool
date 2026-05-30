@@ -26,7 +26,7 @@ export async function importSourceFile(file: File, options: ImportOptions): Prom
   let rawChunks: string[] = [];
   let pages: number | undefined;
 
-  options.onProgress?.(`???? ${file.name}`);
+  options.onProgress?.(`正在读取 ${file.name}`);
 
   if (type === 'pptx') {
     const parsed = await parsePptxFile(file, options);
@@ -35,7 +35,7 @@ export async function importSourceFile(file: File, options: ImportOptions): Prom
     warnings.push(...parsed.warnings);
   } else if (type === 'ocr') {
     if (!options.enableOcr) {
-      warnings.push('?????????? OCR????????????????????????');
+      warnings.push('图片资料需要开启本地 OCR；如识别不准，请在组织图页手动补充人员和汇报线。');
     } else {
       try {
         const result = await recognizeImageBlob(file, (progress) => {
@@ -45,10 +45,10 @@ export async function importSourceFile(file: File, options: ImportOptions): Prom
         });
         rawChunks = splitIntoChunks(result.text);
         if (result.confidence < 0.55) {
-          warnings.push('?? OCR ?????????????????????');
+          warnings.push('图片 OCR 置信度较低，请人工确认姓名、岗位和汇报线。');
         }
       } catch (error) {
-        warnings.push(`?? OCR ???${error instanceof Error ? error.message : String(error)}?????????????`);
+        warnings.push(`图片 OCR 失败：${error instanceof Error ? error.message : String(error)}。请手动补充人员和汇报线。`);
       }
     }
   } else {
@@ -57,7 +57,7 @@ export async function importSourceFile(file: File, options: ImportOptions): Prom
   }
 
   if (rawChunks.length === 0) {
-    warnings.push('??????????????????????????');
+    warnings.push('没有解析到可抽取文本，请确认文件内容或使用手工补录。');
   }
 
   const source: SourceDocument = {

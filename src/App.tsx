@@ -58,18 +58,18 @@ type OrgChartStyle = 'regular' | 'tree';
 type CanvasViewKey = AppState['project']['settings']['activeCanvasView'];
 
 const navItems: Array<{ key: ViewKey; label: string; icon: typeof Inbox }> = [
-  { key: 'import', label: '??', icon: Inbox },
-  { key: 'review', label: '??', icon: Check },
-  { key: 'map', label: '???', icon: Network },
-  { key: 'export', label: '??', icon: Download },
+  { key: 'import', label: '导入', icon: Inbox },
+  { key: 'review', label: '确认', icon: Check },
+  { key: 'map', label: '组织图', icon: Network },
+  { key: 'export', label: '导出', icon: Download },
 ];
 
 const kindLabel: Record<CandidateKind, string> = {
-  person: '??',
-  orgUnit: '??',
-  roleAssignment: '??',
-  reportingLine: '???',
-  changeEvent: '??',
+  person: '人员',
+  orgUnit: '组织',
+  roleAssignment: '任职',
+  reportingLine: '汇报线',
+  changeEvent: '变更',
 };
 
 const defaultFilters: OrgMapFilters = {
@@ -110,10 +110,10 @@ function chartStyleForView(view: CanvasViewKey): OrgChartStyle {
 
 function canvasViewLabel(view: CanvasViewKey): string {
   return {
-    executive: '???? ? ?????',
-    mindmap: '???? ? ???',
-    recruiting: '???? ? ?????',
-    detail: '???? ? ???',
+    executive: '汇报模式 · 常规架构图',
+    mindmap: '汇报模式 · 树状图',
+    recruiting: '招聘模式 · 常规架构图',
+    detail: '招聘模式 · 树状图',
   }[view];
 }
 
@@ -180,7 +180,7 @@ function App() {
           visibleLimit: hydrated.project.settings.defaultVisibleNodeLimit,
         }));
       })
-      .catch((error) => setToast(`????????${error instanceof Error ? error.message : String(error)}`))
+      .catch((error) => setToast(`本地库读取失败：${error instanceof Error ? error.message : String(error)}`))
       .finally(() => setLoaded(true));
   }, []);
 
@@ -189,7 +189,7 @@ function App() {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       persistState(state).catch((error) =>
-        setToast(`???????${error instanceof Error ? error.message : String(error)}`),
+        setToast(`本地保存失败：${error instanceof Error ? error.message : String(error)}`),
       );
     }, 350);
   }, [loaded, state]);
@@ -209,23 +209,23 @@ function App() {
         const result = await importSourceFile(file, { enableOcr });
         candidateCount += result.candidates.length;
         setState((current) =>
-          appendAudit(addImportResult(current, result), 'import', `?? ${file.name}`, {
+          appendAudit(addImportResult(current, result), 'import', `导入 ${file.name}`, {
             entityCount: result.candidates.length,
             view: 'import',
             sourceName: file.name,
           }),
         );
       } catch (error) {
-        setToast(`${file.name} ?????${error instanceof Error ? error.message : String(error)}`);
+        setToast(`${file.name} 导入失败：${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
     if (candidateCount > 0) {
-      setToast(`??? ${candidateCount} ???`);
+      setToast(`已生成 ${candidateCount} 条候选`);
       setOpenManualRepair(false);
       setActiveView('review');
     } else {
-      setToast(enableOcr ? '????????????' : '?????????? OCR ?????????');
+      setToast(enableOcr ? '未识别到候选，请手动补充' : '未识别到候选，可开启 OCR 后重试，或手动补充');
       setOpenManualRepair(true);
       setActiveView('map');
     }
@@ -233,11 +233,11 @@ function App() {
 
   function loadMapBusinessDemo(): void {
     const demo = createMapBusinessDemoState();
-    setState(appendAudit(demo, 'demo-loaded', '?????????????', { entityCount: demo.people.length, view: 'map' }));
+    setState(appendAudit(demo, 'demo-loaded', '载入大规模地图业务虚拟样例', { entityCount: demo.people.length, view: 'map' }));
     setFilters({ ...defaultFilters, visibleLimit: 96, maxDepth: 3, minConfidence: 0.72 });
     setOpenManualRepair(false);
     setActiveView('map');
-    setToast('???????Demo');
+    setToast('已载入虚拟演示Demo');
   }
 
   function decideCandidates(candidateIds: string[], status: 'accepted' | 'rejected'): void {
@@ -252,7 +252,7 @@ function App() {
       return appendAudit(
         next,
         status === 'accepted' ? 'candidate-accepted' : 'candidate-rejected',
-        `${status === 'accepted' ? '??' : '??'} ${selectedPendingCount} ???`,
+        `${status === 'accepted' ? '确认' : '忽略'} ${selectedPendingCount} 条候选`,
         { entityCount: selectedPendingCount, view: 'review' },
       );
     });
@@ -276,8 +276,8 @@ function App() {
     try {
       const blob = await exportEncryptedProjectPackage(state, password);
       downloadBlob(blob, `${state.project.name}.mapping.zip`);
-      setState((current) => appendAudit(current, 'export', '???????', { view: 'export' }));
-      setToast('????????');
+      setState((current) => appendAudit(current, 'export', '导出加密项目包', { view: 'export' }));
+      setToast('已导出加密项目包');
     } catch (error) {
       setToast(error instanceof Error ? error.message : String(error));
     }
@@ -287,9 +287,9 @@ function App() {
     if (!file) return;
     try {
       const imported = ensureStateShape(await importEncryptedProjectPackage(file, password));
-      setState(appendAudit(imported, 'project-imported', `????? ${file.name}`, { view: 'export', sourceName: file.name }));
+      setState(appendAudit(imported, 'project-imported', `导入项目包 ${file.name}`, { view: 'export', sourceName: file.name }));
       setActiveView('map');
-      setToast('??????');
+      setToast('项目包已导入');
     } catch (error) {
       setToast(error instanceof Error ? error.message : String(error));
     }
@@ -302,7 +302,7 @@ function App() {
         .then((response) => response.blob())
         .then((blob) => {
           downloadBlob(blob, `${state.project.name}-org-map.png`);
-          setState((current) => appendAudit(current, 'export', '????? PNG', { entityCount: graph.nodes.length, view: 'export' }));
+          setState((current) => appendAudit(current, 'export', '导出组织图 PNG', { entityCount: graph.nodes.length, view: 'export' }));
         });
     } catch (error) {
       setToast(error instanceof Error ? error.message : String(error));
@@ -312,8 +312,8 @@ function App() {
   async function exportPptx(): Promise<void> {
     try {
       await exportReportPptx(state, filters);
-      setState((current) => appendAudit(current, 'export', '?? PPTX', { entityCount: graph.nodes.length, view: 'export' }));
-      setToast('PPTX ???');
+      setState((current) => appendAudit(current, 'export', '导出 PPTX', { entityCount: graph.nodes.length, view: 'export' }));
+      setToast('PPTX 已生成');
     } catch (error) {
       setToast(error instanceof Error ? error.message : String(error));
     }
@@ -327,12 +327,12 @@ function App() {
             <GitBranch size={20} />
           </div>
           <div>
-            <strong>Mapping ??</strong>
-            <span>????????</span>
+            <strong>Mapping 工具</strong>
+            <span>本地组织图生成器</span>
           </div>
         </div>
 
-        <nav className="nav-list" aria-label="???">
+        <nav className="nav-list" aria-label="主导航">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -352,8 +352,8 @@ function App() {
         <div className="privacy-box">
           <ShieldCheck size={18} />
           <div>
-            <strong>????</strong>
-            <span>???????? IndexedDB?</span>
+            <strong>本地处理</strong>
+            <span>资料保存在浏览器 IndexedDB。</span>
           </div>
         </div>
       </aside>
@@ -362,7 +362,7 @@ function App() {
         {toast && (
           <div className="toast" role="status">
             <span>{toast}</span>
-            <button type="button" onClick={() => setToast('')} aria-label="????">
+            <button type="button" onClick={() => setToast('')} aria-label="关闭提示">
               <X size={16} />
             </button>
           </div>
@@ -426,24 +426,24 @@ function ImportView({
       <div className="import-entry-grid">
         <div className="drop-zone">
           <Upload size={30} />
-          <h2>????</h2>
+          <h2>上传资料</h2>
           <input
             type="file"
             multiple
             accept=".txt,.md,.pptx,.png,.jpg,.jpeg,.webp,.bmp"
             onChange={(event) => void onFiles(event.target.files)}
-            aria-label="??????"
+            aria-label="选择资料文件"
           />
           <label className="toggle-line">
             <input type="checkbox" checked={enableOcr} onChange={(event) => setEnableOcr(event.target.checked)} />
-            <span>?? OCR</span>
+            <span>本地 OCR</span>
           </label>
         </div>
 
         <aside className="demo-data-panel">
           <button type="button" className="primary-button" onClick={loadMapBusinessDemo}>
             <Network size={16} />
-            ????Demo
+            虚拟演示Demo
           </button>
         </aside>
       </div>
@@ -477,7 +477,7 @@ function ReviewView({
     <section className="view-stack">
       <section className="tool-panel recognition-preview">
         <div className="section-heading">
-          <h2>??????</h2>
+          <h2>确认识别结果</h2>
           <span className="small-badge">{candidates.length}</span>
         </div>
         <div className="recognition-grid">
@@ -497,15 +497,15 @@ function ReviewView({
 
       <div className="toolbar">
         <button type="button" className="secondary-button" onClick={() => setKindFilter('all')}>
-          ??
+          全部
         </button>
         <button type="button" className="primary-button" onClick={() => onAccept(allIds)} disabled={!allIds.length}>
           <Check size={16} />
-          ????
+          全部确认
         </button>
         <button type="button" className="secondary-button" onClick={() => onReject(allIds)} disabled={!allIds.length}>
           <X size={16} />
-          ????
+          全部忽略
         </button>
       </div>
 
@@ -524,15 +524,15 @@ function ReviewView({
             </div>
             <div className="candidate-actions">
               <button type="button" className="primary-button" onClick={() => onAccept([candidate.id])}>
-                ??
+                确认
               </button>
               <button type="button" className="secondary-button" onClick={() => onReject([candidate.id])}>
-                ??
+                忽略
               </button>
             </div>
           </article>
         ))}
-        {visibleCandidates.length === 0 && <EmptyState title="???????" body="?????????????????????" />}
+        {visibleCandidates.length === 0 && <EmptyState title="没有待确认候选" body="上传资料后会在这里确认人员、组织和汇报线。" />}
       </div>
     </section>
   );
@@ -551,45 +551,45 @@ function CandidateEditor({
   if (candidate.kind === 'person') {
     const data = payload as PersonCandidatePayload;
     fields.push(
-      { key: 'name', label: '??', value: data.name },
-      { key: 'company', label: '??', value: data.company },
-      { key: 'title', label: '??', value: data.title },
-      { key: 'department', label: '??', value: data.department },
+      { key: 'name', label: '姓名', value: data.name },
+      { key: 'company', label: '公司', value: data.company },
+      { key: 'title', label: '岗位', value: data.title },
+      { key: 'department', label: '部门', value: data.department },
     );
   }
   if (candidate.kind === 'orgUnit') {
     const data = payload as OrgUnitCandidatePayload;
     fields.push(
-      { key: 'name', label: '??', value: data.name },
-      { key: 'company', label: '??', value: data.company },
-      { key: 'function', label: '??', value: data.function },
-      { key: 'parentName', label: '????', value: data.parentName },
+      { key: 'name', label: '组织', value: data.name },
+      { key: 'company', label: '公司', value: data.company },
+      { key: 'function', label: '职能', value: data.function },
+      { key: 'parentName', label: '上级组织', value: data.parentName },
     );
   }
   if (candidate.kind === 'roleAssignment') {
     const data = payload as RoleCandidatePayload;
     fields.push(
-      { key: 'personName', label: '??', value: data.personName },
-      { key: 'title', label: '??', value: data.title },
-      { key: 'orgUnitName', label: '??', value: data.orgUnitName },
-      { key: 'company', label: '??', value: data.company },
+      { key: 'personName', label: '姓名', value: data.personName },
+      { key: 'title', label: '岗位', value: data.title },
+      { key: 'orgUnitName', label: '部门', value: data.orgUnitName },
+      { key: 'company', label: '公司', value: data.company },
     );
   }
   if (candidate.kind === 'reportingLine') {
     const data = payload as ReportingCandidatePayload;
     fields.push(
-      { key: 'managerName', label: '??', value: data.managerName },
-      { key: 'subordinateName', label: '??', value: data.subordinateName },
-      { key: 'relationType', label: '??', value: data.relationType },
+      { key: 'managerName', label: '上级', value: data.managerName },
+      { key: 'subordinateName', label: '下级', value: data.subordinateName },
+      { key: 'relationType', label: '关系', value: data.relationType },
     );
   }
   if (candidate.kind === 'changeEvent') {
     const data = payload as ChangeCandidatePayload;
     fields.push(
-      { key: 'personName', label: '??', value: data.personName },
-      { key: 'type', label: '??', value: data.type },
-      { key: 'description', label: '??', value: data.description },
-      { key: 'date', label: '??', value: data.date },
+      { key: 'personName', label: '人员', value: data.personName },
+      { key: 'type', label: '类型', value: data.type },
+      { key: 'description', label: '描述', value: data.description },
+      { key: 'date', label: '日期', value: data.date },
     );
   }
 
@@ -689,7 +689,7 @@ function OrgMapView({
         },
       };
       next.project.updatedAt = timestamp;
-      return appendAudit(next, 'canvas-layout-saved', `??${canvasViewLabel(activeView)}??`, {
+      return appendAudit(next, 'canvas-layout-saved', `保存${canvasViewLabel(activeView)}画布`, {
         entityCount: Object.keys(visiblePositions).length,
         view: 'map',
       });
@@ -703,7 +703,7 @@ function OrgMapView({
       delete layouts[layoutId];
       next.canvasLayouts = layouts;
       next.project.updatedAt = new Date().toISOString();
-      return appendAudit(next, 'canvas-layout-reset', `??${canvasViewLabel(activeView)}??`, { view: 'map' });
+      return appendAudit(next, 'canvas-layout-reset', `重置${canvasViewLabel(activeView)}画布`, { view: 'map' });
     });
   };
 
@@ -714,7 +714,7 @@ function OrgMapView({
     setState((current) => {
       const next: AppState = structuredClone(current);
       const existing = next.people.find((person) => normalizeName(person.name) === normalizeName(name));
-      const company = manualPerson.company.trim() || existing?.company || next.project.companies[0] || '?????';
+      const company = manualPerson.company.trim() || existing?.company || next.project.companies[0] || '待确认公司';
       const department = manualPerson.department.trim() || existing?.currentDepartment;
       const title = manualPerson.title.trim() || existing?.currentTitle;
       if (existing) {
@@ -730,7 +730,7 @@ function OrgMapView({
           company,
           currentTitle: title,
           currentDepartment: department,
-          tags: ['????'],
+          tags: ['手动补录'],
           status: 'active',
           evidenceIds: [],
           updatedAt: timestamp,
@@ -760,7 +760,7 @@ function OrgMapView({
         });
       }
       next.project.updatedAt = timestamp;
-      return appendAudit(next, 'talent-updated', `?????? ${name}`, { view: 'map' });
+      return appendAudit(next, 'talent-updated', `手动补录人员 ${name}`, { view: 'map' });
     });
     setManualPerson({ name: '', title: '', department: '', company: '' });
   };
@@ -778,8 +778,8 @@ function OrgMapView({
             id: createId('person'),
             name,
             aliases: [],
-            company: next.project.companies[0] || '?????',
-            tags: ['????'],
+            company: next.project.companies[0] || '待确认公司',
+            tags: ['手动补录'],
             status: 'active',
             evidenceIds: [],
             updatedAt: timestamp,
@@ -808,7 +808,7 @@ function OrgMapView({
         });
       }
       next.project.updatedAt = timestamp;
-      return appendAudit(next, 'talent-updated', `??????? ${subordinate} -> ${manager}`, { view: 'map' });
+      return appendAudit(next, 'talent-updated', `手动新增汇报线 ${subordinate} -> ${manager}`, { view: 'map' });
     });
     setManualLine({ manager: '', subordinate: '' });
   };
@@ -816,7 +816,7 @@ function OrgMapView({
   const graphNodes: Node[] = useMemo(
     () =>
       graph.nodes.map((node) => {
-        const departmentLabel = node.department ?? node.company ?? '?????';
+        const departmentLabel = node.department ?? node.company ?? '未归属部门';
         const reportCount = Math.max(node.span, node.visibleSpan);
         const noteCount = node.changeCount + (node.averageConfidence < 0.75 ? 1 : 0) + (node.hiddenDirectCount > 0 ? 1 : 0);
         return {
@@ -851,8 +851,8 @@ function OrgMapView({
                       <strong>{departmentLabel}</strong>
                       <small>L{node.depth}</small>
                     </div>
-                    <span>????{node.label}</span>
-                    <em>{reportCount} ?</em>
+                    <span>一号位：{node.label}</span>
+                    <em>{reportCount} 人</em>
                     <button
                       type="button"
                       className="node-note-button"
@@ -861,7 +861,7 @@ function OrgMapView({
                         setSelectedNodeId(node.id);
                       }}
                     >
-                      ??{noteCount > 0 ? ` ${noteCount}` : ''}
+                      备注{noteCount > 0 ? ` ${noteCount}` : ''}
                     </button>
                   </>
                 ) : (
@@ -870,12 +870,12 @@ function OrgMapView({
                       <strong>{node.label}</strong>
                       <small>{node.levelLabel}</small>
                     </div>
-                    <span>{node.title ?? '?????'}</span>
-                    <em>{node.department ?? node.company ?? '?????'}</em>
+                    <span>{node.title ?? '岗位待确认'}</span>
+                    <em>{node.department ?? node.company ?? '组织待确认'}</em>
                     <div className="flow-node-meta">
                       <b>{Math.round(node.averageConfidence * 100)}%</b>
-                      {node.span > 0 && <b>{node.visibleSpan}/{node.span} ??</b>}
-                      {node.hiddenDirectCount > 0 && <b>+{node.hiddenDirectCount} ??</b>}
+                      {node.span > 0 && <b>{node.visibleSpan}/{node.span} 下属</b>}
+                      {node.hiddenDirectCount > 0 && <b>+{node.hiddenDirectCount} 收起</b>}
                     </div>
                   </>
                 )}
@@ -963,7 +963,7 @@ function OrgMapView({
     });
   };
 
-  const selectedDepartment = selectedGraphNode?.department ?? selectedGraphNode?.company ?? '?????';
+  const selectedDepartment = selectedGraphNode?.department ?? selectedGraphNode?.company ?? '未归属部门';
   const selectedRemarks = selectedGraphNode
     ? [
         ...state.changeEvents
@@ -974,19 +974,19 @@ function OrgMapView({
           })
           .slice(0, 5)
           .map((event) => event.description),
-        ...(selectedGraphNode.averageConfidence < 0.75 ? ['????????????????'] : []),
-        ...(selectedGraphNode.hiddenDirectCount > 0 ? [`??? ${selectedGraphNode.hiddenDirectCount} ??????`] : []),
-        ...(selectedGraphNode.span === 0 ? ['??????????'] : []),
+        ...(selectedGraphNode.averageConfidence < 0.75 ? ['存在低置信度来源，汇报前需复核。'] : []),
+        ...(selectedGraphNode.hiddenDirectCount > 0 ? [`已收起 ${selectedGraphNode.hiddenDirectCount} 个下钻人员。`] : []),
+        ...(selectedGraphNode.span === 0 ? ['暂未识别到直属下属。'] : []),
       ]
     : [];
 
   return (
     <section className="map-layout">
-      <div className="canvas-command-bar" aria-label="?????">
-        <div className="segmented-control" role="group" aria-label="????">
+      <div className="canvas-command-bar" aria-label="画布工具栏">
+        <div className="segmented-control" role="group" aria-label="业务模式">
           {([
-            ['report', '????'],
-            ['recruiting', '????'],
+            ['report', '汇报模式'],
+            ['recruiting', '招聘模式'],
           ] as Array<[OrgBusinessMode, string]>).map(([mode, label]) => (
             <button
               key={mode}
@@ -999,10 +999,10 @@ function OrgMapView({
             </button>
           ))}
         </div>
-        <div className="segmented-control" role="group" aria-label="????">
+        <div className="segmented-control" role="group" aria-label="图形样式">
           {([
-            ['regular', '?????'],
-            ['tree', '???'],
+            ['regular', '常规架构图'],
+            ['tree', '树状图'],
           ] as Array<[OrgChartStyle, string]>).map(([style, label]) => (
             <button
               key={style}
@@ -1024,17 +1024,17 @@ function OrgMapView({
                 onClick={() => setFilters({ ...filters, maxDepth: Math.min(filters.maxDepth + 1, 8), visibleLimit: Math.min(filters.visibleLimit + 120, 600) })}
               >
                 <Maximize2 size={16} />
-                ????
+                展开更多
               </button>
               <button type="button" className="secondary-button" onClick={() => setFilters({ ...filters, maxDepth: 2, visibleLimit: 160 })}>
                 <RotateCcw size={16} />
-                ????
+                折叠部门
               </button>
             </>
           )}
           <button type="button" className="secondary-button" onClick={saveVisibleLayout} disabled={!editMode}>
             <Save size={16} />
-            ????
+            保存布局
           </button>
           <button
             type="button"
@@ -1042,7 +1042,7 @@ function OrgMapView({
             onClick={() => setEditMode((value) => !value)}
           >
             {editMode ? <Lock size={16} /> : <Move size={16} />}
-            {editMode ? '????' : '????'}
+            {editMode ? '结束编辑' : '编辑布局'}
           </button>
           <button
             type="button"
@@ -1050,24 +1050,24 @@ function OrgMapView({
             onClick={() => setShowManualRepair((value) => !value)}
           >
             <Users size={16} />
-            ????
+            手动补充
           </button>
           <button type="button" className="secondary-button" onClick={() => flowInstance?.fitView({ duration: 260 })}>
             <Maximize2 size={16} />
-            ????
+            适配画布
           </button>
           <button type="button" className="secondary-button" onClick={resetLayout} disabled={savedCount === 0}>
             <RotateCcw size={16} />
-            ????
+            自动布局
           </button>
         </div>
       </div>
 
       <div className="map-controls">
         <label>
-          ??
+          公司
           <select value={filters.company} onChange={(event) => setFilters({ ...filters, company: event.target.value })}>
-            <option value="">??</option>
+            <option value="">全部</option>
             {state.project.companies.map((company) => (
               <option key={company} value={company}>
                 {company}
@@ -1076,19 +1076,19 @@ function OrgMapView({
           </select>
         </label>
         <label>
-          ??
-          <input value={filters.search} placeholder="??/??/??" onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+          搜索
+          <input value={filters.search} placeholder="姓名/岗位/部门" onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
         </label>
         <label>
-          ???
+          负责人
           <input
             value={filters.focusPersonName}
-            placeholder="??"
+            placeholder="姓名"
             onChange={(event) => setFilters({ ...filters, focusPersonName: event.target.value })}
           />
         </label>
         <label>
-          ??? {Math.round(filters.minConfidence * 100)}%
+          置信度 {Math.round(filters.minConfidence * 100)}%
           <input
             type="range"
             min="0"
@@ -1099,7 +1099,7 @@ function OrgMapView({
           />
         </label>
         <label>
-          ????
+          节点上限
           <input
             type="number"
             min="30"
@@ -1109,7 +1109,7 @@ function OrgMapView({
           />
         </label>
         <label>
-          ??
+          层级
           <input
             type="number"
             min="1"
@@ -1124,32 +1124,32 @@ function OrgMapView({
         <section className="tool-panel manual-repair-panel">
           <div className="manual-repair-grid">
             <div>
-              <h3>??/????</h3>
+              <h3>新增/更新人员</h3>
               <div className="candidate-fields">
-                <Field label="??" value={manualPerson.name} onChange={(value) => setManualPerson((current) => ({ ...current, name: value }))} />
-                <Field label="??" value={manualPerson.title} onChange={(value) => setManualPerson((current) => ({ ...current, title: value }))} />
-                <Field label="??" value={manualPerson.department} onChange={(value) => setManualPerson((current) => ({ ...current, department: value }))} />
-                <Field label="??" value={manualPerson.company} onChange={(value) => setManualPerson((current) => ({ ...current, company: value }))} />
+                <Field label="姓名" value={manualPerson.name} onChange={(value) => setManualPerson((current) => ({ ...current, name: value }))} />
+                <Field label="岗位" value={manualPerson.title} onChange={(value) => setManualPerson((current) => ({ ...current, title: value }))} />
+                <Field label="部门" value={manualPerson.department} onChange={(value) => setManualPerson((current) => ({ ...current, department: value }))} />
+                <Field label="公司" value={manualPerson.company} onChange={(value) => setManualPerson((current) => ({ ...current, company: value }))} />
               </div>
               <button type="button" className="primary-button" onClick={upsertManualPerson}>
-                ????
+                保存人员
               </button>
             </div>
             <div>
-              <h3>?????</h3>
+              <h3>新增汇报线</h3>
               <div className="candidate-fields compact-fields">
-                <Field label="??" value={manualLine.manager} onChange={(value) => setManualLine((current) => ({ ...current, manager: value }))} />
-                <Field label="??" value={manualLine.subordinate} onChange={(value) => setManualLine((current) => ({ ...current, subordinate: value }))} />
+                <Field label="上级" value={manualLine.manager} onChange={(value) => setManualLine((current) => ({ ...current, manager: value }))} />
+                <Field label="下级" value={manualLine.subordinate} onChange={(value) => setManualLine((current) => ({ ...current, subordinate: value }))} />
               </div>
               <button type="button" className="primary-button" onClick={addManualLine}>
-                ?????
+                连接上下级
               </button>
             </div>
           </div>
         </section>
       )}
 
-      {graph.truncated && <div className="inline-warning">?????? {graph.totalBeforeLimit} ?????? {filters.visibleLimit} ????</div>}
+      {graph.truncated && <div className="inline-warning">当前筛选命中 {graph.totalBeforeLimit} 人，仅渲染前 {filters.visibleLimit} 个节点。</div>}
 
       <div className={isTree ? 'flow-surface mindmap-surface' : 'flow-surface formal-surface'}>
         <ReactFlow
@@ -1184,26 +1184,26 @@ function OrgMapView({
         <section className="tool-panel node-detail-panel">
           <div className="section-heading">
             <h2>{selectedDepartment}</h2>
-            <button type="button" className="icon-button" onClick={() => setSelectedNodeId('')} aria-label="????">
+            <button type="button" className="icon-button" onClick={() => setSelectedNodeId('')} aria-label="关闭备注">
               <X size={16} />
             </button>
           </div>
           <div className="node-detail-grid">
             <span>
-              <strong>???</strong>
+              <strong>一号位</strong>
               {selectedGraphNode.label}
             </span>
             <span>
-              <strong>????</strong>
+              <strong>下属人数</strong>
               {Math.max(selectedGraphNode.span, selectedGraphNode.visibleSpan)}
             </span>
             <span>
-              <strong>??</strong>
+              <strong>层级</strong>
               L{selectedGraphNode.depth}
             </span>
           </div>
           <div className="node-remarks">
-            {(selectedRemarks.length > 0 ? selectedRemarks : ['????']).map((remark, index) => (
+            {(selectedRemarks.length > 0 ? selectedRemarks : ['暂无备注']).map((remark, index) => (
               <p key={`${remark}-${index}`}>{remark}</p>
             ))}
           </div>
@@ -1239,43 +1239,43 @@ function ExportView({
       <div className="export-grid">
         <section className="tool-panel">
           <div className="section-heading">
-            <h2>??</h2>
+            <h2>导出</h2>
             <span className="small-badge">{canvasViewLabel(state.project.settings.activeCanvasView)}</span>
           </div>
           <div className="button-row">
             <button type="button" className="primary-button" onClick={exportPptx}>
               <Download size={16} />
-              ?? PPTX
+              导出 PPTX
             </button>
             <button type="button" className="secondary-button" onClick={exportPng}>
               <ImageDown size={16} />
-              ?? PNG
+              导出 PNG
             </button>
           </div>
           <div className="export-preview">
             <div className="preview-meta">
-              {previewGraph.nodes.length} ??? ? {previewGraph.edges.length} ??
+              {previewGraph.nodes.length} 个节点 · {previewGraph.edges.length} 条线
             </div>
           </div>
         </section>
 
         <section className="tool-panel">
           <div className="section-heading">
-            <h2>???</h2>
+            <h2>项目包</h2>
             <span className="small-badge">.mapping.zip</span>
           </div>
           <label className="field wide">
-            <span>??</span>
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="?? 6 ???" />
+            <span>密码</span>
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="至少 6 个字符" />
           </label>
           <div className="button-row">
             <button type="button" className="primary-button" onClick={exportPackage}>
               <ShieldCheck size={16} />
-              ?????
+              导出加密包
             </button>
             <label className="file-button">
               <Upload size={16} />
-              ?????
+              导入加密包
               <input type="file" accept=".zip,.mapping.zip" onChange={(event) => void importPackage(event.target.files?.[0])} />
             </label>
           </div>
