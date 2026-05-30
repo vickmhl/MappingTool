@@ -2,6 +2,7 @@ import type { ImportResult, SourceDocument } from '../types';
 import { buildImportExtraction, splitIntoChunks } from './extractor';
 import { sha256FromBuffer, sha256FromText } from './hash';
 import { createId, nowIso } from './ids';
+import { recognizeImageBlob } from './ocr';
 import { parsePptxFile } from './pptx';
 
 export interface ImportOptions {
@@ -12,6 +13,7 @@ export interface ImportOptions {
 function sourceTypeForFile(file: File): SourceDocument['type'] {
   const name = file.name.toLowerCase();
   if (name.endsWith('.pptx')) return 'pptx';
+  if (/\.(png|jpe?g|webp|bmp)$/i.test(name) || file.type?.startsWith('image/')) return 'ocr';
   if (name.endsWith('.md')) return 'markdown';
   return 'text';
 }
@@ -24,20 +26,38 @@ export async function importSourceFile(file: File, options: ImportOptions): Prom
   let rawChunks: string[] = [];
   let pages: number | undefined;
 
-  options.onProgress?.(`正在读取 ${file.name}`);
+  options.onProgress?.(`???? ${file.name}`);
 
   if (type === 'pptx') {
     const parsed = await parsePptxFile(file, options);
     rawChunks = parsed.chunks.flatMap((chunk) => splitIntoChunks(chunk));
     pages = parsed.pages;
     warnings.push(...parsed.warnings);
+  } else if (type === 'ocr') {
+    if (!options.enableOcr) {
+      warnings.push('?????????? OCR????????????????????????');
+    } else {
+      try {
+        const result = await recognizeImageBlob(file, (progress) => {
+          if (progress.progress > 0) {
+            options.onProgress?.(`OCR ${file.name}: ${Math.round(progress.progress * 100)}%`);
+          }
+        });
+        rawChunks = splitIntoChunks(result.text);
+        if (result.confidence < 0.55) {
+          warnings.push('?? OCR ?????????????????????');
+        }
+      } catch (error) {
+        warnings.push(`?? OCR ???${error instanceof Error ? error.message : String(error)}?????????????`);
+      }
+    }
   } else {
     const text = await file.text();
     rawChunks = splitIntoChunks(text);
   }
 
   if (rawChunks.length === 0) {
-    warnings.push('没有解析到可抽取文本，请确认文件内容或使用手工补录。');
+    warnings.push('??????????????????????????');
   }
 
   const source: SourceDocument = {

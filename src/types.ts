@@ -53,7 +53,7 @@ export interface Project {
     };
     staleAfterDays: number;
     defaultVisibleNodeLimit: number;
-    activeCanvasView: 'executive' | 'recruiting' | 'detail';
+    activeCanvasView: 'executive' | 'recruiting' | 'detail' | 'mindmap';
     orgChartMode: OrgChartMode;
     orgChartExportFormat: OrgChartExportFormat;
     reportTemplate: ReportTemplateKey;

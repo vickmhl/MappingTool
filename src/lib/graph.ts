@@ -2,14 +2,14 @@ import type { AppState, CanvasLayout, OrgChartMode, OrgMapFilters, Person, Repor
 import { normalizeName } from './ids';
 
 export const ORG_MAP_LAYOUT_ID = 'org-map';
-export type CanvasViewKey = 'executive' | 'recruiting' | 'detail';
+export type CanvasViewKey = 'executive' | 'recruiting' | 'detail' | 'mindmap';
 
 const EXPLORE_CARD_WIDTH = 210;
 const EXPLORE_CARD_HEIGHT = 98;
-const FORMAL_CARD_WIDTH = 232;
-const FORMAL_CARD_HEIGHT = 124;
-const FORMAL_X_GAP = 58;
-const FORMAL_Y_GAP = 210;
+const FORMAL_CARD_WIDTH = 196;
+const FORMAL_CARD_HEIGHT = 92;
+const FORMAL_X_GAP = 48;
+const FORMAL_Y_GAP = 118;
 
 export interface OrgGraphNode {
   id: string;
@@ -30,6 +30,7 @@ export interface OrgGraphNode {
   averageConfidence: number;
   changeCount: number;
   laneId?: string;
+  mindMapSide?: 'root' | 'left' | 'right';
   x: number;
   y: number;
 }
@@ -103,12 +104,16 @@ function currentMode(state: AppState): OrgChartMode {
 }
 
 function levelLabelForPerson(person: Person, depth: number): string {
+  if (depth === 0) return 'L0 ??';
+  if (depth === 1) return 'L1 BU???';
+  if (depth === 2) return 'L2 ?????';
+  if (depth === 3) return 'L3 ?????';
   const text = `${person.currentTitle ?? ''}${person.tags.join(' ')}`;
-  if (/总经理|总裁|副总裁|VP|高管|核心目标/i.test(text) || depth === 0) return 'L0 高管';
-  if (/一级负责人/i.test(text) || depth === 1) return 'L1 BU负责人';
-  if (/二级负责人|总监|负责人|Head/i.test(text) || depth === 2) return 'L2 部门负责人';
-  if (/三级负责人|经理|主管|Lead/i.test(text) || depth === 3) return 'L3 团队负责人';
-  return 'IC/专家';
+  if (/???|??|???|VP|??|????/i.test(text)) return 'L0 ??';
+  if (/?????/i.test(text)) return 'L1 BU???';
+  if (/?????|??|???|Head/i.test(text)) return 'L2 ?????';
+  if (/?????|??|??|Lead/i.test(text)) return 'L3 ?????';
+  return 'IC/??';
 }
 
 function topAncestorForName(
@@ -184,6 +189,7 @@ export function getOrgMapLayout(state: AppState): CanvasLayout | undefined {
 
 export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = getOrgMapLayout(state)): OrgGraph {
   const mode = currentMode(state);
+  const isMindMap = state.project.settings.activeCanvasView === 'mindmap' || state.project.settings.activeCanvasView === 'detail';
   const candidatePeople = state.people.filter((person) => !filters.company || person.company === filters.company);
   const peopleByName = new Map(candidatePeople.map((person) => [normalizeName(person.name), person]));
   const allCandidateNames = new Set(peopleByName.keys());
@@ -293,8 +299,10 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     changeCountByName.set(name, (changeCountByName.get(name) ?? 0) + 1);
   }
 
-  const positions = mode === 'formal'
-    ? buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName)
+  const positions: Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> = mode === 'formal'
+    ? isMindMap
+      ? buildMindMapPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName)
+      : buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName)
     : buildExplorePositions(limitedPeople, layout, depthByName);
 
   const laneByName = new Map<string, string>();
@@ -302,7 +310,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     const name = normalizeName(person.name);
     const depth = depthByName.get(name) ?? 0;
     const topAncestor = topAncestorForName(name, managerBySubordinate, depthByName);
-    const laneId = depth === 0 ? undefined : `lane:${topAncestor}`;
+    const laneId = isMindMap || depth <= 1 ? undefined : `lane:${topAncestor}`;
     if (laneId) laneByName.set(name, laneId);
     const span = directSpanAll.get(name) ?? 0;
     const visibleSpan = visibleChildrenByManager.get(name)?.length ?? 0;
@@ -316,7 +324,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       status: person.status,
       updatedAt: person.updatedAt,
       evidenceCount: person.evidenceIds.length,
-      isTalent: person.tags.includes('关键人才池'),
+      isTalent: person.tags.includes('?????'),
       isFocus: Boolean(focusName && name === focusName),
       depth,
       levelLabel: levelLabelForPerson(person, depth),
@@ -329,6 +337,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
           : confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length,
       changeCount: changeCountByName.get(name) ?? 0,
       laneId,
+      mindMapSide: positions.get(name)?.side,
       x: positions.get(name)?.x ?? 80,
       y: positions.get(name)?.y ?? 70,
     };
@@ -338,12 +347,12 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     id: line.id,
     source: nodeIdForName(line.managerName),
     target: nodeIdForName(line.subordinateName),
-    label: line.relationType === 'dotted-line' ? '虚线汇报' : line.relationType === 'manages' ? '管理' : '汇报',
+    label: line.relationType === 'dotted-line' ? '????' : line.relationType === 'manages' ? '??' : '??',
     confidence: line.confidence,
     relationType: line.relationType,
   }));
 
-  const lanes = mode === 'formal' ? buildFormalLanes(nodes) : [];
+  const lanes = mode === 'formal' && !isMindMap ? buildFormalLanes(nodes) : [];
   const visibleManagers = nodes.filter((node) => node.visibleSpan > 0).length;
   const focusChain = focusName
     ? [...focusAncestors, focusName]
@@ -411,6 +420,10 @@ function buildFormalPositions(
     .map((person) => normalizeName(person.name))
     .filter((name) => !managerBySubordinate.has(name) || !visibleNames.has(managerBySubordinate.get(name)!));
   const orderedRoots = sortNamesByPerson(roots, peopleByName, depthByName);
+  const maxDepth = Math.max(0, ...people.map((person) => depthByName.get(normalizeName(person.name)) ?? 0));
+  if (maxDepth <= 1 && people.length > 6) {
+    return buildShallowFormalPositions(people, peopleByName, childrenByManager, depthByName, orderedRoots);
+  }
   const xByName = new Map<string, number>();
   let cursor = 0;
 
@@ -453,10 +466,149 @@ function buildFormalPositions(
     const depth = depthByName.get(name) ?? 0;
     const column = (xByName.get(name) ?? 0) - minColumn;
     positions.set(name, {
-      x: 80 + column * (FORMAL_CARD_WIDTH + FORMAL_X_GAP),
-      y: 78 + depth * FORMAL_Y_GAP,
+      x: 64 + column * (FORMAL_CARD_WIDTH + FORMAL_X_GAP),
+      y: 64 + depth * FORMAL_Y_GAP,
     });
   }
+  return positions;
+}
+
+function buildMindMapPositions(
+  people: Person[],
+  peopleByName: Map<string, Person>,
+  childrenByManager: Map<string, string[]>,
+  managerBySubordinate: Map<string, string>,
+  depthByName: Map<string, number>,
+): Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> {
+  const visibleNames = new Set(people.map((person) => normalizeName(person.name)));
+  const roots = people
+    .map((person) => normalizeName(person.name))
+    .filter((name) => !managerBySubordinate.has(name) || !visibleNames.has(managerBySubordinate.get(name)!));
+  const orderedRoots = sortNamesByPerson(roots, peopleByName, depthByName);
+  const root = orderedRoots[0] ?? normalizeName(people[0]?.name ?? '');
+  const positions = new Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }>();
+  if (!root) return positions;
+
+  const rootX = 620;
+  const rootY = 320;
+  const leftX = 305;
+  const rightX = 915;
+  const childGapX = 238;
+  const rowGap = 104;
+  positions.set(root, { x: rootX, y: rootY, side: 'root' });
+
+  const directChildren = sortNamesByPerson(
+    (childrenByManager.get(root) ?? []).filter((child) => visibleNames.has(child)),
+    peopleByName,
+    depthByName,
+  );
+  const leftChildren = directChildren.filter((_, index) => index % 2 === 0);
+  const rightChildren = directChildren.filter((_, index) => index % 2 === 1);
+
+  const placeBranch = (branchRoots: string[], side: 'left' | 'right') => {
+    const direction = side === 'left' ? -1 : 1;
+    const baseX = side === 'left' ? leftX : rightX;
+    branchRoots.forEach((name, index) => {
+      const band = Math.ceil(index / 2);
+      const y = rootY + (index % 2 === 0 ? 1 : -1) * band * rowGap;
+      positions.set(name, { x: baseX, y, side });
+      const children = sortNamesByPerson(
+        (childrenByManager.get(name) ?? []).filter((child) => visibleNames.has(child)),
+        peopleByName,
+        depthByName,
+      ).slice(0, 6);
+      children.forEach((child, childIndex) => {
+        positions.set(child, {
+          x: baseX + direction * childGapX,
+          y: y - ((children.length - 1) * 42) / 2 + childIndex * 42,
+          side,
+        });
+      });
+    });
+  };
+
+  placeBranch(leftChildren, 'left');
+  placeBranch(rightChildren, 'right');
+
+  let fallbackRow = 0;
+  for (const person of people) {
+    const name = normalizeName(person.name);
+    if (positions.has(name)) continue;
+    const depth = depthByName.get(name) ?? 0;
+    const side = fallbackRow % 2 === 0 ? 'left' : 'right';
+    const direction = side === 'left' ? -1 : 1;
+      positions.set(name, {
+      x: (side === 'left' ? leftX : rightX) + direction * (childGapX + Math.max(0, depth - 2) * 170),
+      y: rootY + 170 + fallbackRow * 70,
+      side,
+    });
+    fallbackRow += 1;
+  }
+
+  return positions;
+}
+
+function buildShallowFormalPositions(
+  people: Person[],
+  peopleByName: Map<string, Person>,
+  childrenByManager: Map<string, string[]>,
+  depthByName: Map<string, number>,
+  orderedRoots: string[],
+): Map<string, { x: number; y: number }> {
+  const visibleNames = new Set(people.map((person) => normalizeName(person.name)));
+  const positions = new Map<string, { x: number; y: number }>();
+  const stepX = FORMAL_CARD_WIDTH + FORMAL_X_GAP;
+  const defaultStepY = FORMAL_CARD_HEIGHT + 34;
+  let cursorX = 64;
+
+  for (const root of orderedRoots) {
+    const children = sortNamesByPerson(
+      (childrenByManager.get(root) ?? []).filter((child) => visibleNames.has(child)),
+      peopleByName,
+      depthByName,
+    );
+    const columns = children.length > 6 ? 2 : children.length > 0 ? Math.min(4, Math.max(2, Math.ceil(Math.sqrt(children.length * 1.5)))) : 1;
+    const stepY = children.length > 6 ? FORMAL_CARD_HEIGHT + 8 : defaultStepY;
+    const rows = children.length > 0 ? Math.ceil(children.length / columns) : 1;
+    const groupWidth = columns * FORMAL_CARD_WIDTH + (columns - 1) * FORMAL_X_GAP;
+    const rootPerson = peopleByName.get(root);
+
+    if (rootPerson && visibleNames.has(root)) {
+      positions.set(root, {
+        x: cursorX + groupWidth / 2 - FORMAL_CARD_WIDTH / 2,
+        y: 64,
+      });
+    }
+
+    if (children.length === 0 && rootPerson) {
+      positions.set(root, { x: cursorX, y: 64 });
+    } else {
+      children.forEach((child, index) => {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        positions.set(child, {
+          x: cursorX + column * stepX,
+          y: 64 + FORMAL_Y_GAP + row * stepY,
+        });
+      });
+    }
+
+    cursorX += groupWidth + 96;
+    if (rows > 2) cursorX += 24;
+  }
+
+  for (const person of people) {
+    const name = normalizeName(person.name);
+    if (!positions.has(name)) {
+      const depth = depthByName.get(name) ?? 0;
+      positions.set(name, {
+        x: cursorX,
+        y: 64 + depth * FORMAL_Y_GAP,
+      });
+      cursorX += stepX;
+    }
+  }
+
   return positions;
 }
 

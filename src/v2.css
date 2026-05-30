@@ -1,0 +1,143 @@
+.workspace {
+  padding: 22px;
+}
+
+.view-stack {
+  max-width: 1180px;
+}
+
+.import-entry-grid {
+  min-height: calc(100vh - 44px);
+  align-items: stretch;
+}
+
+.drop-zone {
+  min-height: 420px;
+  align-content: center;
+  border-color: #b8c7d9;
+}
+
+.drop-zone h2 {
+  font-size: 28px;
+}
+
+.demo-data-panel {
+  min-height: 420px;
+  border-top: 0;
+}
+
+.demo-data-panel .primary-button {
+  min-height: 48px;
+  padding: 0 22px;
+  font-size: 16px;
+}
+
+.canvas-command-bar {
+  grid-template-columns: auto auto minmax(280px, 1fr);
+}
+
+.canvas-actions {
+  justify-content: flex-end;
+}
+
+.map-controls {
+  grid-template-columns: 150px minmax(170px, 1fr) 140px minmax(160px, 1fr) 112px 96px;
+}
+
+.flow-surface {
+  height: calc(100vh - 205px);
+  min-height: 560px;
+}
+
+.flow-node.business-report {
+  width: 230px;
+  min-height: 112px;
+  padding: 12px 14px;
+  border-top: 3px solid #1677ff;
+}
+
+.flow-node.business-report strong {
+  font-size: 16px;
+}
+
+.flow-node.business-report span,
+.flow-node.business-report em {
+  color: #4e5969;
+  font-size: 13px;
+}
+
+.flow-node.business-report.selected {
+  outline: 2px solid #1677ff;
+  outline-offset: 2px;
+}
+
+.flow-node.business-recruiting {
+  width: 216px;
+  min-height: 106px;
+}
+
+.node-note-button {
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 8px;
+  color: #0b5cff;
+  background: #eef5ff;
+  border: 1px solid #c7ddff;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.node-detail-panel {
+  max-width: 920px;
+}
+
+.node-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.node-detail-grid span {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: #f8fbff;
+  border: 1px solid #d8e7ff;
+  border-radius: 8px;
+}
+
+.node-detail-grid strong {
+  color: #646a73;
+  font-size: 12px;
+}
+
+.node-remarks {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.node-remarks p {
+  margin: 0;
+  padding: 10px 12px;
+  background: #fbfcfc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.export-preview {
+  min-height: 92px;
+}
+
+@media (max-width: 1100px) {
+  .import-entry-grid,
+  .canvas-command-bar,
+  .map-controls,
+  .export-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .canvas-actions {
+    justify-content: flex-start;
+  }
+}
