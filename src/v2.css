@@ -63,7 +63,8 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  gap: 8px;
+  gap: 6px;
+  padding: 8px 10px;
   border-color: #dfe7f2;
   box-shadow: 0 8px 20px rgb(31 35 41 / 5%);
 }
@@ -145,7 +146,7 @@
     linear-gradient(#f2f5f9 1px, transparent 1px),
     linear-gradient(90deg, #f2f5f9 1px, transparent 1px),
     #ffffff;
-  background-size: 36px 36px;
+  background-size: 32px 32px;
 }
 
 .flow-node.business-report {
@@ -244,26 +245,27 @@
 }
 
 .flow-node.business-report.mindmap {
-  width: 246px;
-  min-height: 98px;
+  width: 220px;
+  min-height: 92px;
   border-top: 0;
   border-color: #d9dde5;
   box-shadow: 0 6px 16px rgb(31 35 41 / 7%);
 }
 
 .flow-node.business-report.mindmap-root {
-  min-height: 104px;
+  width: 232px;
+  min-height: 98px;
   border: 1.5px solid #0f172a;
   box-shadow: 0 0 0 4px #ffffff;
 }
 
 .flow-node.business-report.mindmap-left {
   text-align: right;
-  border-right: 3px solid #1f2329;
+  border-right: 2px solid #1f2329;
 }
 
 .flow-node.business-report.mindmap-right {
-  border-left: 3px solid #1f2329;
+  border-left: 2px solid #1f2329;
 }
 
 .flow-node.business-report.mindmap-left .flow-node-top {
@@ -271,8 +273,8 @@
 }
 
 .flow-node.business-report.mindmap-leaf {
-  min-height: 58px;
-  width: 220px;
+  min-height: 52px;
+  width: 194px;
   border-top: 0;
   border-bottom: 1px solid #1f2329;
   border-left: 0;
@@ -385,7 +387,7 @@
 .export-preview {
   display: grid;
   gap: 12px;
-  min-height: 210px;
+  min-height: 260px;
   padding: 14px;
   overflow: hidden;
   background:
@@ -397,11 +399,48 @@
   border-radius: 8px;
 }
 
+.export-format-row {
+  margin-bottom: 4px;
+}
+
+.export-format-chip {
+  min-width: 88px;
+}
+
+.export-format-chip.active {
+  color: #0b5cff;
+  background: #eef5ff;
+  border-color: #b8d5ff;
+}
+
+.preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preview-meta strong {
+  color: #0b5cff;
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .export-preview p {
   margin: 0;
   color: #60746d;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.export-preview-image {
+  width: 100%;
+  max-height: 430px;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid #dbe5ef;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgb(31 35 41 / 8%);
 }
 
 .export-mini-chart {
@@ -506,6 +545,11 @@
     padding: 8px;
   }
 
+  .export-format-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .segmented-control button,
   .canvas-actions .secondary-button {
     min-height: 34px;
@@ -533,5 +577,10 @@
 
   .export-mini-chart {
     grid-template-columns: 1fr;
+  }
+
+  .preview-meta {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
