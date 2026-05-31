@@ -56,6 +56,83 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
+function exportFormatLabel(format: OrgChartExportFormat): string {
+  if (format === 'a4Landscape') return 'A4 横版';
+  if (format === 'longImage') return '长图';
+  return 'PPT 16:9';
+}
+
+function wrapCanvasText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return [''];
+
+  const lines: string[] = [];
+  let current = '';
+  for (const char of clean) {
+    const next = current + char;
+    if (context.measureText(next).width <= maxWidth || current.length === 0) {
+      current = next;
+      continue;
+    }
+    lines.push(current);
+    current = char;
+    if (lines.length === maxLines - 1) break;
+  }
+  if (lines.length < maxLines) lines.push(current);
+  if (lines.length > maxLines) lines.length = maxLines;
+  if (lines.length === maxLines && context.measureText(clean).width > maxWidth) {
+    const last = lines[maxLines - 1] ?? '';
+    lines[maxLines - 1] = last.length > 1 ? `${last.slice(0, Math.max(1, last.length - 1))}…` : '…';
+  }
+  return lines.filter(Boolean);
+}
+
+function drawCanvasPill(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  label: string,
+  options: { fill: string; color: string; radius?: number; font?: string },
+): number {
+  context.save();
+  context.font = options.font ?? '600 11px Microsoft YaHei, sans-serif';
+  const width = Math.max(44, context.measureText(label).width + 18);
+  const height = 22;
+  context.fillStyle = options.fill;
+  context.beginPath();
+  context.roundRect(x, y, width, height, options.radius ?? 999);
+  context.fill();
+  context.fillStyle = options.color;
+  context.textBaseline = 'middle';
+  context.fillText(label, x + 9, y + height / 2);
+  context.restore();
+  return width;
+}
+
+function collectExportHighlights(
+  state: AppState,
+  graph: ReturnType<typeof buildOrgGraph>,
+): string[] {
+  const visibleNames = new Set(graph.nodes.map((node) => normalizeName(node.label)));
+  const eventNotes = state.changeEvents
+    .filter((event) => event.personName && visibleNames.has(normalizeName(event.personName)))
+    .sort((a, b) => new Date(b.date ?? b.createdAt).getTime() - new Date(a.date ?? a.createdAt).getTime())
+    .map((event) => maskKnownPeopleText(state, event.description));
+
+  const summaryNotes = [
+    graph.diagnostics.hiddenDirectReports > 0 ? `已收起 ${graph.diagnostics.hiddenDirectReports} 个下钻人员，正式汇报请先看一级和二级负责人。` : '',
+    graph.diagnostics.weakRelationCount > 0 ? `有 ${graph.diagnostics.weakRelationCount} 条低置信度汇报线，导出前建议复核。` : '',
+    graph.truncated ? `当前筛选命中 ${graph.totalBeforeLimit} 人，本次导出按 ${graph.nodes.length} 个节点输出。` : '',
+  ].filter(Boolean);
+
+  return [...eventNotes, ...summaryNotes].slice(0, 4);
+}
+
 export function exportOrgGraphPng(
   state: AppState,
   filters: OrgMapFilters,
@@ -66,20 +143,22 @@ export function exportOrgGraphPng(
   const activeView = state.project.settings.activeCanvasView;
   const isReport = activeView === 'executive' || activeView === 'mindmap';
   const isMindMap = activeView === 'mindmap' || activeView === 'detail';
-  const nodeWidth = isReport ? (isMindMap ? 236 : 226) : isMindMap ? 202 : 216;
-  const nodeHeight = isReport ? (isMindMap ? 94 : 106) : isMindMap ? 70 : 106;
+  const nodeWidth = isReport ? (isMindMap ? 220 : 236) : isMindMap ? 194 : 220;
+  const nodeHeight = isReport ? (isMindMap ? 92 : 118) : isMindMap ? 74 : 108;
   const modeText = isReport ? '汇报模式' : '招聘模式';
   const styleText = isMindMap ? '树状图' : '常规架构图';
+  const notes = collectExportHighlights(state, graph);
   const bounds = [
-    ...graph.nodes.map((node) => ({ x1: node.x, y1: node.y, x2: node.x + nodeWidth + 34, y2: node.y + nodeHeight + 28 })),
+    ...graph.nodes.map((node) => ({ x1: node.x, y1: node.y, x2: node.x + nodeWidth + 30, y2: node.y + nodeHeight + 24 })),
     ...graph.lanes.map((lane) => ({ x1: lane.x, y1: lane.y, x2: lane.x + lane.width, y2: lane.y + lane.height })),
   ];
   const minX = bounds.length ? Math.min(...bounds.map((item) => item.x1)) : 0;
   const minY = bounds.length ? Math.min(...bounds.map((item) => item.y1)) : 0;
   const maxX = bounds.length ? Math.max(...bounds.map((item) => item.x2)) : 1120;
   const maxY = bounds.length ? Math.max(...bounds.map((item) => item.y2)) : 620;
-  const chartPadding = 36;
-  const headerHeight = format === 'longImage' ? 96 : 128;
+  const chartPadding = 42;
+  const headerHeight = format === 'longImage' ? 98 : 116;
+  const footerHeight = format === 'longImage' ? 116 : 160;
   const contentWidth = Math.max(1120, maxX - minX + chartPadding * 2);
   const contentHeight = Math.max(560, maxY - minY + chartPadding * 2);
   const fixedSize =
@@ -89,10 +168,14 @@ export function exportOrgGraphPng(
         ? { width: 1754, height: 1240 }
         : undefined;
   const width = fixedSize?.width ?? contentWidth;
-  const height = fixedSize?.height ?? contentHeight + headerHeight + 36;
-  const scale = fixedSize ? Math.min((width - 110) / contentWidth, (height - headerHeight - 56) / contentHeight, 1.18) : 1;
-  const offsetX = fixedSize ? Math.max(54, (width - contentWidth * scale) / 2) : 0;
-  const offsetY = headerHeight;
+  const height = fixedSize?.height ?? contentHeight + headerHeight + footerHeight + 24;
+  const boardX = fixedSize ? 36 : 0;
+  const boardY = headerHeight + 20;
+  const boardWidth = fixedSize ? width - 72 : contentWidth;
+  const boardHeight = fixedSize ? height - headerHeight - footerHeight - 38 : contentHeight;
+  const scale = fixedSize ? Math.min((boardWidth - 28) / contentWidth, (boardHeight - 28) / contentHeight, format === 'a4Landscape' ? 1.04 : 1.12) : 1;
+  const offsetX = fixedSize ? boardX + Math.max(14, (boardWidth - contentWidth * scale) / 2) : 0;
+  const offsetY = fixedSize ? boardY + Math.max(14, (boardHeight - contentHeight * scale) / 2) : boardY;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -102,35 +185,80 @@ export function exportOrgGraphPng(
     throw new Error('浏览器不支持 Canvas 导出。');
   }
 
-  context.fillStyle = '#ffffff';
+  context.fillStyle = '#f4f7fb';
   context.fillRect(0, 0, width, height);
   context.fillStyle = '#0f172a';
-  context.fillRect(0, 0, width, fixedSize ? 92 : 74);
+  context.fillRect(0, 0, width, headerHeight);
   context.fillStyle = '#ffffff';
-  context.font = '700 30px Microsoft YaHei, sans-serif';
-  context.fillText(state.project.name, 40, 45);
+  context.font = fixedSize ? '700 30px Microsoft YaHei, sans-serif' : '700 26px Microsoft YaHei, sans-serif';
+  context.fillText(state.project.name, 38, 46);
   context.fillStyle = '#cbd5e1';
   context.font = '15px Microsoft YaHei, sans-serif';
   context.fillText(
-    `${modeText} · ${styleText} · ${graph.nodes.length} 个节点 · ${graph.edges.length} 条关系 · ${format === 'ppt16x9' ? 'PPT 16:9' : format === 'a4Landscape' ? 'A4 横版' : '长图'}`,
+    `${modeText} · ${styleText} · ${graph.nodes.length} 个节点 · ${graph.edges.length} 条关系 · ${exportFormatLabel(format)}`,
     40,
-    73,
+    76,
   );
-  context.fillStyle = '#f8fafc';
-  context.fillRect(0, fixedSize ? 92 : 74, width, height - (fixedSize ? 92 : 74));
+  let metricX = width - 32;
+  const metricLabels = [
+    `${graph.diagnostics.hiddenDirectReports} 收起`,
+    `${graph.diagnostics.weakRelationCount} 待复核`,
+    `${graph.diagnostics.recentChangePeopleCount} 变更`,
+  ];
+  for (const label of metricLabels.reverse()) {
+    context.save();
+    context.font = '600 12px Microsoft YaHei, sans-serif';
+    const pillWidth = Math.max(44, context.measureText(label).width + 18);
+    context.restore();
+    metricX -= pillWidth;
+    drawCanvasPill(context, metricX, 34, label, { fill: 'rgba(255,255,255,0.1)', color: '#ffffff', font: '600 12px Microsoft YaHei, sans-serif' });
+    metricX -= 10;
+  }
+
+  context.fillStyle = '#ffffff';
+  context.beginPath();
+  context.roundRect(boardX, boardY, boardWidth, boardHeight, 20);
+  context.fill();
+  context.strokeStyle = '#d9e3f0';
+  context.lineWidth = 1;
+  context.stroke();
+
+  context.save();
+  context.beginPath();
+  context.roundRect(boardX, boardY, boardWidth, boardHeight, 20);
+  context.clip();
+  context.fillStyle = '#f8fbff';
+  context.fillRect(boardX, boardY, boardWidth, boardHeight);
+  context.strokeStyle = '#edf2f7';
+  context.lineWidth = 1;
+  for (let x = boardX; x < boardX + boardWidth; x += 36) {
+    context.beginPath();
+    context.moveTo(x, boardY);
+    context.lineTo(x, boardY + boardHeight);
+    context.stroke();
+  }
+  for (let y = boardY; y < boardY + boardHeight; y += 36) {
+    context.beginPath();
+    context.moveTo(boardX, y);
+    context.lineTo(boardX + boardWidth, y);
+    context.stroke();
+  }
+  context.restore();
 
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
 
   context.save();
   context.translate(offsetX - (minX - chartPadding) * scale, offsetY - (minY - chartPadding) * scale);
   context.scale(scale, scale);
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
 
   for (const lane of graph.lanes) {
-    context.fillStyle = '#f0f6ff';
-    context.strokeStyle = '#c7ddff';
+    context.fillStyle = '#eef5ff';
+    context.strokeStyle = '#cfe0ff';
     context.lineWidth = 1.2;
     context.beginPath();
-    context.roundRect(lane.x, lane.y, lane.width, lane.height, 12);
+    context.roundRect(lane.x, lane.y, lane.width, lane.height, 16);
     context.fill();
     context.stroke();
     context.fillStyle = '#1d4ed8';
@@ -146,8 +274,8 @@ export function exportOrgGraphPng(
     const target = nodeById.get(edge.target);
     if (!source || !target) continue;
 
-    context.strokeStyle = edge.confidence < 0.72 ? '#d54941' : isMindMap ? '#1f2329' : '#1677ff';
-    context.lineWidth = isMindMap ? 1.4 : 2;
+    context.strokeStyle = edge.confidence < 0.72 ? '#d54941' : isMindMap ? '#475569' : '#1677ff';
+    context.lineWidth = isMindMap ? 1.55 : 2.3;
     if (edge.confidence < 0.75 || edge.relationType === 'dotted-line') context.setLineDash([8, 6]);
     else context.setLineDash([]);
     context.beginPath();
@@ -178,13 +306,16 @@ export function exportOrgGraphPng(
   context.setLineDash([]);
 
   for (const node of graph.nodes) {
+    const accent = node.status === 'left' ? '#d54941' : node.depth === 0 ? '#1247b2' : node.changeCount > 0 ? '#d99000' : isReport ? '#0b5cff' : node.isTalent ? '#00a870' : '#7c8da6';
     context.fillStyle = node.status === 'left' ? '#fff1f0' : node.changeCount > 0 ? '#fffaf0' : '#ffffff';
-    context.strokeStyle = node.status === 'left' ? '#d54941' : node.isFocus ? '#0b5cff' : node.changeCount > 0 ? '#efd99a' : '#c7d6e8';
-    context.lineWidth = 1.5;
+    context.strokeStyle = node.isFocus ? '#0b5cff' : node.status === 'left' ? '#d54941' : node.changeCount > 0 ? '#efd99a' : '#c7d6e8';
+    context.lineWidth = node.isFocus ? 2.2 : 1.45;
     context.beginPath();
-    context.roundRect(node.x, node.y, nodeWidth, nodeHeight, isMindMap && node.depth >= 2 ? 0 : 8);
+    context.roundRect(node.x, node.y, nodeWidth, nodeHeight, isMindMap && node.depth >= 2 ? 2 : 10);
     context.fill();
     context.stroke();
+    context.fillStyle = accent;
+    context.fillRect(node.x, node.y, nodeWidth, isMindMap && node.depth >= 2 ? 3 : 6);
 
     const orgText = shouldMaskCompanies(state) ? '组织已脱敏' : node.department ?? node.company ?? '组织待确认';
     const displayName = anonymize ? maskName(node.label) : node.label;
@@ -193,15 +324,26 @@ export function exportOrgGraphPng(
     if (isReport) {
       context.fillStyle = '#1f2329';
       context.font = `700 ${isMindMap ? 14 : 16}px Microsoft YaHei, sans-serif`;
-      context.fillText(orgText.slice(0, isMindMap ? 14 : 16), node.x + 12, node.y + 25);
+      wrapCanvasText(context, orgText, nodeWidth - 24, 2).forEach((line, index) => {
+        context.fillText(line, node.x + 12, node.y + 28 + index * 18);
+      });
       context.fillStyle = '#4e5969';
       context.font = '12px Microsoft YaHei, sans-serif';
-      context.fillText(`一号位 ${displayName}`.slice(0, 19), node.x + 12, node.y + 48);
-      context.font = '650 12px Microsoft YaHei, sans-serif';
-      context.fillText(`下属 ${Math.max(node.descendantCount, node.span, node.visibleSpan)} 人`, node.x + 12, node.y + 68);
-      if (!isMindMap || node.depth <= 1) {
-        context.fillStyle = '#0b5cff';
-        context.fillText(`备注${noteCount > 0 ? ` ${noteCount}` : ''}`, node.x + 12, node.y + nodeHeight - 12);
+      context.fillText(`一号位 ${displayName}`.slice(0, isMindMap ? 18 : 20), node.x + 12, node.y + (isMindMap ? 62 : 70));
+      let pillX = node.x + 12;
+      pillX += drawCanvasPill(context, pillX, node.y + nodeHeight - 28, `团队 ${Math.max(node.descendantCount, node.span, node.visibleSpan)}`, {
+        fill: '#edf4ff',
+        color: '#0b5cff',
+      }) + 6;
+      pillX += drawCanvasPill(context, pillX, node.y + nodeHeight - 28, `直属 ${node.visibleSpan}`, {
+        fill: '#f3f6fa',
+        color: '#475569',
+      }) + 6;
+      if ((!isMindMap || node.depth <= 1) && noteCount > 0) {
+        drawCanvasPill(context, pillX, node.y + nodeHeight - 28, `备注 ${noteCount}`, {
+          fill: '#fff4dd',
+          color: '#b26a00',
+        });
       }
     } else {
       context.fillStyle = '#1f2329';
@@ -213,16 +355,72 @@ export function exportOrgGraphPng(
       context.fillStyle = '#646a73';
       context.fillText(orgText.slice(0, 18), node.x + 12, node.y + 68);
       if (!isMindMap) {
-        context.fillStyle = node.isTalent ? '#00a870' : '#4e5969';
-        context.fillText(
-          `${node.isTalent ? '重点 · ' : ''}${node.visibleSpan}/${node.span} 下属${node.hiddenDirectCount ? ` · +${node.hiddenDirectCount}` : ''}`,
-          node.x + 12,
-          node.y + 92,
+        let pillX = node.x + 12;
+        if (node.isTalent) {
+          pillX += drawCanvasPill(context, pillX, node.y + nodeHeight - 28, '重点人才', {
+            fill: '#eaf8f2',
+            color: '#0f6b4f',
+          }) + 6;
+        }
+        drawCanvasPill(
+          context,
+          pillX,
+          node.y + nodeHeight - 28,
+          `${node.visibleSpan}/${node.span} 下属${node.hiddenDirectCount ? ` · +${node.hiddenDirectCount}` : ''}`,
+          {
+            fill: '#f3f6fa',
+            color: '#475569',
+          },
         );
       }
     }
   }
   context.restore();
+
+  const footerY = height - footerHeight + 18;
+  const summaryCards = [
+    { label: '当前视图', value: `${modeText} · ${styleText}` },
+    { label: '画布节点', value: `${graph.nodes.length} / ${graph.totalBeforeLimit}` },
+    { label: '待复核', value: `${graph.diagnostics.weakRelationCount} 条` },
+  ];
+  summaryCards.forEach((item, index) => {
+    const x = 38 + index * 206;
+    context.fillStyle = '#ffffff';
+    context.beginPath();
+    context.roundRect(x, footerY, 182, 84, 16);
+    context.fill();
+    context.strokeStyle = '#d9e3f0';
+    context.lineWidth = 1;
+    context.stroke();
+    context.fillStyle = '#64748b';
+    context.font = '600 13px Microsoft YaHei, sans-serif';
+    context.fillText(item.label, x + 16, footerY + 28);
+    context.fillStyle = '#172033';
+    context.font = '700 22px Microsoft YaHei, sans-serif';
+    context.fillText(item.value, x + 16, footerY + 58);
+  });
+
+  const notePanelX = fixedSize ? 680 : 38 + summaryCards.length * 206;
+  const notePanelWidth = width - notePanelX - 38;
+  context.fillStyle = '#ffffff';
+  context.beginPath();
+  context.roundRect(notePanelX, footerY, notePanelWidth, 84, 16);
+  context.fill();
+  context.strokeStyle = '#d9e3f0';
+  context.lineWidth = 1;
+  context.stroke();
+  context.fillStyle = '#64748b';
+  context.font = '600 13px Microsoft YaHei, sans-serif';
+  context.fillText('关键备注', notePanelX + 16, footerY + 28);
+  context.fillStyle = '#172033';
+  context.font = '13px Microsoft YaHei, sans-serif';
+  const noteText =
+    notes.length > 0
+      ? notes.map((note) => `• ${clipText(note, fixedSize ? 44 : 64)}`).join('   ')
+      : '• 当前导出未发现需要额外说明的结构异常。';
+  wrapCanvasText(context, noteText, notePanelWidth - 32, 2).forEach((line, index) => {
+    context.fillText(line, notePanelX + 16, footerY + 56 + index * 18);
+  });
 
   return canvas.toDataURL('image/png');
 }
@@ -365,12 +563,23 @@ function buildOrgHierarchyModel(state: AppState): OrgHierarchyModel {
 
 export async function exportReportPptx(
   state: AppState,
-  _filters: OrgMapFilters,
+  filters: OrgMapFilters,
   fileName = `${state.project.name}.pptx`,
 ): Promise<void> {
   const anonymize = shouldMaskNames(state);
   const narrative = buildExecutiveNarrative(state);
   const orgModel = buildOrgHierarchyModel(state);
+  const exportGraph = buildOrgGraph(state, filters);
+  const chartPreviewWide = exportOrgGraphPng(state, filters, anonymize, 'ppt16x9');
+  const chartHighlights = collectExportHighlights(state, exportGraph);
+  const activeCanvasLabel =
+    state.project.settings.activeCanvasView === 'mindmap'
+      ? '汇报模式 · 树状图'
+      : state.project.settings.activeCanvasView === 'executive'
+        ? '汇报模式 · 常规架构图'
+        : state.project.settings.activeCanvasView === 'detail'
+          ? '招聘模式 · 树状图'
+          : '招聘模式 · 常规架构图';
   const pendingCount = state.candidates.filter((candidate) => candidate.status === 'pending').length;
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
@@ -588,27 +797,69 @@ export async function exportReportPptx(
   addFooter(cover, 1);
 
   const orgSlide = pptx.addSlide();
-  addHeader(orgSlide, 'REPORTING MODE', '汇报版组织图：只看高层到关键团队', '用于领导快速判断组织骨架、负责人和管理跨度。');
-  if (orgModel.root) {
-    addOrgCard(orgSlide, orgModel.root, 5.1, 1.45, 3.15, 1.18, { root: true, accent: deck.blueDark });
-    const cardPositions = orgModel.firstLayer.slice(0, 6).map((card, index) => ({
-      card,
-      x: 0.72 + (index % 3) * 4.1,
-      y: 3.12 + Math.floor(index / 3) * 1.65,
-      w: 3.34,
-      h: 1.12,
-    }));
-    if (cardPositions.length > 0) {
-      addLine(orgSlide, 6.68, 2.63, 0, 0.26);
-      addLine(orgSlide, cardPositions[0].x + cardPositions[0].w / 2, 2.89, cardPositions[cardPositions.length - 1].x + cardPositions[cardPositions.length - 1].w / 2 - (cardPositions[0].x + cardPositions[0].w / 2), 0);
-    }
-    for (const item of cardPositions) {
-      addLine(orgSlide, item.x + item.w / 2, 2.89, 0, item.y - 2.89);
-      addOrgCard(orgSlide, item.card, item.x, item.y, item.w, item.h, { accent: item.card.changeCount > 0 ? deck.amber : deck.line });
-    }
+  addHeader(orgSlide, 'CANVAS EXPORT', '当前画布主图', `按 ${activeCanvasLabel} 导出，保留当前筛选条件与手动布局。`);
+  orgSlide.addText('', {
+    x: 0.62,
+    y: 1.48,
+    w: 8.68,
+    h: 5.36,
+    fill: { color: deck.panel },
+    line: { color: deck.line, pt: 0.75 },
+    margin: 0,
+  });
+  if (exportGraph.nodes.length > 0) {
+    orgSlide.addImage({ data: chartPreviewWide, x: 0.78, y: 1.66, w: 8.36, h: 5.0 });
   } else {
-    orgSlide.addText('暂无可导出的汇报线，请先确认候选关系。', { x: 0.7, y: 2.8, w: 8, h: 0.4, fontSize: 16, bold: true, color: deck.ink });
+    orgSlide.addText('暂无可导出的组织图，请先确认候选关系。', {
+      x: 1.0,
+      y: 3.75,
+      w: 7.6,
+      h: 0.38,
+      fontSize: 16,
+      bold: true,
+      color: deck.ink,
+      align: 'center',
+    });
   }
+  orgSlide.addText('', {
+    x: 9.58,
+    y: 1.48,
+    w: 3.02,
+    h: 5.36,
+    fill: { color: deck.panel },
+    line: { color: deck.line, pt: 0.75 },
+    margin: 0,
+  });
+  orgSlide.addText('导出摘要', { x: 9.84, y: 1.72, w: 1.6, h: 0.24, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
+  orgSlide.addText(
+    [
+      `视图：${activeCanvasLabel}`,
+      `节点：${exportGraph.nodes.length}`,
+      `关系：${exportGraph.edges.length}`,
+      `隐藏下钻：${exportGraph.diagnostics.hiddenDirectReports}`,
+      `待复核：${exportGraph.diagnostics.weakRelationCount}`,
+      `近期变更：${exportGraph.diagnostics.recentChangePeopleCount}`,
+    ].join('\n'),
+    {
+      x: 9.84,
+      y: 2.05,
+      w: 2.44,
+      h: 1.48,
+      fontSize: 8.6,
+      color: deck.ink,
+      fit: 'shrink',
+      margin: 0,
+    },
+  );
+  addBulletPanel(
+    orgSlide,
+    9.84,
+    3.8,
+    2.44,
+    1.9,
+    '关键备注',
+    chartHighlights.length > 0 ? chartHighlights : ['当前画布未发现需要额外说明的结构异常。'],
+  );
   addFooter(orgSlide, 2);
 
   const layerSlide = pptx.addSlide();
