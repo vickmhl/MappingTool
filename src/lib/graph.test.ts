@@ -31,4 +31,25 @@ describe('org graph performance', () => {
     expect(graphDuration).toBeLessThan(1000);
     expect(insightDuration).toBeLessThan(1500);
   });
+
+  it('keeps the tree chart compact enough for direct previewing', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'mindmap';
+
+    const graph = buildOrgGraph(state, {
+      company: '',
+      search: '',
+      focusPersonName: '',
+      minConfidence: 0.72,
+      visibleLimit: 24,
+      maxDepth: 1,
+    });
+
+    const minX = Math.min(...graph.nodes.map((node) => node.x));
+    const maxX = Math.max(...graph.nodes.map((node) => node.x));
+    expect(maxX - minX).toBeLessThan(1450);
+    expect(graph.nodes.some((node) => node.mindMapSide === 'left')).toBe(true);
+    expect(graph.nodes.some((node) => node.mindMapSide === 'right')).toBe(true);
+  });
 });
