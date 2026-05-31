@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMapBusinessDemoState } from './seed';
-import { buildOrgGraph, ORG_MAP_LAYOUT_ID } from '../lib/graph';
+import { buildOrgGraph, layoutIdForCanvasView, ORG_MAP_LAYOUT_ID } from '../lib/graph';
 
 describe('seed data', () => {
   it('creates a large virtual map business sample for canvas testing', () => {
@@ -58,5 +58,36 @@ describe('seed data', () => {
     expect(graph.lanes.length).toBeGreaterThan(3);
     expect(graph.diagnostics.hiddenDirectReports).toBeGreaterThan(0);
     expect(graph.edges[0]?.relationType).toBe('reports-to');
+  });
+
+  it('keeps saved positions in report org chart layouts', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'executive';
+    state.canvasLayouts = {
+      [layoutIdForCanvasView('executive')]: {
+        updatedAt: '2026-05-29T00:00:00.000Z',
+        nodes: {
+          'person:林澈': {
+            x: 720,
+            y: 188,
+            updatedAt: '2026-05-29T00:00:00.000Z',
+          },
+        },
+      },
+    };
+
+    const graph = buildOrgGraph(state, {
+      company: '',
+      search: '',
+      focusPersonName: '',
+      minConfidence: 0.5,
+      visibleLimit: 32,
+      maxDepth: 1,
+    });
+    const node = graph.nodes.find((item) => item.id === 'person:林澈');
+
+    expect(node?.x).toBe(720);
+    expect(node?.y).toBe(188);
   });
 });

@@ -860,6 +860,9 @@ function OrgMapView({
                   'flow-node',
                   isReportMode ? 'business-report' : 'business-recruiting',
                   isTree ? 'mindmap' : 'formal',
+                  isReportMode ? `report-depth-${Math.min(node.depth, 3)}` : '',
+                  isReportMode && node.changeCount > 0 ? 'has-change-note' : '',
+                  isReportMode && node.hiddenDirectCount > 0 ? 'has-hidden-team' : '',
                   isTree && node.mindMapSide ? `mindmap-${node.mindMapSide}` : '',
                   isTree && node.depth === 0 ? 'mindmap-root' : '',
                   isTree && node.depth === 1 ? 'mindmap-branch' : '',
@@ -881,9 +884,14 @@ function OrgMapView({
                   <>
                     <div className="flow-node-top">
                       <strong>{departmentLabel}</strong>
+                      <small>{node.depth === 0 ? '集团' : `L${node.depth}`}</small>
                     </div>
-                    <span>一号位 {node.label}</span>
-                    <em>下属 {reportCount} 人</em>
+                    <span>{node.title ?? '负责人'}：{node.label}</span>
+                    <div className="report-node-metrics">
+                      <b>{reportCount} 人</b>
+                      <i>{node.visibleSpan} 直属</i>
+                      {node.hiddenDirectCount > 0 && <i>+{node.hiddenDirectCount} 收起</i>}
+                    </div>
                     <button
                       type="button"
                       className="node-note-button"
@@ -892,7 +900,7 @@ function OrgMapView({
                         setSelectedNodeId(node.id);
                       }}
                     >
-                      备注{noteCount > 0 ? ` ${noteCount}` : ''}
+                      查看备注{noteCount > 0 ? ` ${noteCount}` : ''}
                     </button>
                   </>
                 ) : (

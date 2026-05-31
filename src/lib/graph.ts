@@ -6,10 +6,10 @@ export type CanvasViewKey = 'executive' | 'recruiting' | 'detail' | 'mindmap';
 
 const EXPLORE_CARD_WIDTH = 210;
 const EXPLORE_CARD_HEIGHT = 98;
-const FORMAL_CARD_WIDTH = 196;
-const FORMAL_CARD_HEIGHT = 92;
-const FORMAL_X_GAP = 48;
-const FORMAL_Y_GAP = 118;
+const FORMAL_CARD_WIDTH = 246;
+const FORMAL_CARD_HEIGHT = 112;
+const FORMAL_X_GAP = 70;
+const FORMAL_Y_GAP = 150;
 
 export interface OrgGraphNode {
   id: string;
@@ -302,8 +302,8 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
 
   const positions: Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> = mode === 'formal'
     ? isMindMap
-      ? buildMindMapPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName)
-      : buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName)
+      ? buildMindMapPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
+      : buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
     : buildExplorePositions(limitedPeople, layout, depthByName);
 
   const laneByName = new Map<string, string>();
@@ -411,12 +411,33 @@ function buildExplorePositions(
   return positions;
 }
 
+function applySavedPositions<T extends { x: number; y: number }>(
+  positions: Map<string, T>,
+  people: Person[],
+  layout: CanvasLayout | undefined,
+): Map<string, T> {
+  if (!layout) return positions;
+  for (const person of people) {
+    const name = normalizeName(person.name);
+    const saved = layout.nodes[nodeIdForName(person.name)];
+    const current = positions.get(name);
+    if (!saved || !current) continue;
+    positions.set(name, {
+      ...current,
+      x: saved.x,
+      y: saved.y,
+    });
+  }
+  return positions;
+}
+
 function buildFormalPositions(
   people: Person[],
   peopleByName: Map<string, Person>,
   childrenByManager: Map<string, string[]>,
   managerBySubordinate: Map<string, string>,
   depthByName: Map<string, number>,
+  layout: CanvasLayout | undefined,
 ): Map<string, { x: number; y: number }> {
   const visibleNames = new Set(people.map((person) => normalizeName(person.name)));
   const roots = people
@@ -425,7 +446,11 @@ function buildFormalPositions(
   const orderedRoots = sortNamesByPerson(roots, peopleByName, depthByName);
   const maxDepth = Math.max(0, ...people.map((person) => depthByName.get(normalizeName(person.name)) ?? 0));
   if (maxDepth <= 1 && people.length > 6) {
-    return buildShallowFormalPositions(people, peopleByName, childrenByManager, depthByName, orderedRoots);
+    return applySavedPositions(
+      buildShallowFormalPositions(people, peopleByName, childrenByManager, depthByName, orderedRoots),
+      people,
+      layout,
+    );
   }
   const xByName = new Map<string, number>();
   let cursor = 0;
@@ -473,7 +498,7 @@ function buildFormalPositions(
       y: 64 + depth * FORMAL_Y_GAP,
     });
   }
-  return positions;
+  return applySavedPositions(positions, people, layout);
 }
 
 function buildMindMapPositions(
@@ -482,6 +507,7 @@ function buildMindMapPositions(
   childrenByManager: Map<string, string[]>,
   managerBySubordinate: Map<string, string>,
   depthByName: Map<string, number>,
+  layout: CanvasLayout | undefined,
 ): Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> {
   const visibleNames = new Set(people.map((person) => normalizeName(person.name)));
   const roots = people
@@ -496,7 +522,7 @@ function buildMindMapPositions(
   const rootY = 320;
   const primaryGapX = 360;
   const depthGapX = 280;
-  const rowGap = 92;
+  const rowGap = 112;
   positions.set(root, { x: rootX, y: rootY, side: 'root' });
 
   const visibleChildrenOf = (name: string): string[] =>
@@ -578,7 +604,7 @@ function buildMindMapPositions(
     fallbackRow += 1;
   }
 
-  return positions;
+  return applySavedPositions(positions, people, layout);
 }
 
 function buildShallowFormalPositions(

@@ -149,25 +149,93 @@
 }
 
 .flow-node.business-report {
-  width: 226px;
-  min-height: 106px;
-  padding: 12px 14px;
-  border-top: 3px solid #1677ff;
+  width: 246px;
+  min-height: 118px;
+  gap: 8px;
+  padding: 14px 16px 12px;
+  color: #172033;
   background: #ffffff;
+  border: 1px solid #d7e1ef;
+  border-top: 4px solid #0b5cff;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgb(31 35 41 / 8%);
+}
+
+.flow-node.business-report.report-depth-0 {
+  color: #ffffff;
+  background: #123f8c;
+  border-color: #123f8c;
+  border-top-color: #123f8c;
+  box-shadow: 0 16px 32px rgb(18 63 140 / 18%);
+}
+
+.flow-node.business-report.report-depth-0 .flow-node-top small,
+.flow-node.business-report.report-depth-0 span,
+.flow-node.business-report.report-depth-0 .report-node-metrics,
+.flow-node.business-report.report-depth-0 .report-node-metrics i {
+  color: #dceaff;
+}
+
+.flow-node.business-report.report-depth-0 strong,
+.flow-node.business-report.report-depth-0 .report-node-metrics b {
+  color: #ffffff;
+}
+
+.flow-node.business-report.report-depth-1 {
+  border-top-color: #0b5cff;
+}
+
+.flow-node.business-report.report-depth-2,
+.flow-node.business-report.report-depth-3 {
+  border-top-color: #00a870;
+  box-shadow: 0 8px 18px rgb(31 35 41 / 6%);
+}
+
+.flow-node.business-report.has-change-note {
+  background: #fffaf0;
+  border-color: #f0d28a;
 }
 
 .flow-node.business-report strong {
-  font-size: 16px;
+  color: inherit;
+  font-size: 17px;
+  line-height: 1.2;
 }
 
-.flow-node.business-report span,
-.flow-node.business-report em {
+.flow-node.business-report span {
+  display: block;
   color: #4e5969;
   font-size: 13px;
+  font-weight: 650;
 }
 
-.flow-node.business-report em {
-  font-weight: 650;
+.report-node-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: #4e5969;
+  font-size: 12px;
+}
+
+.report-node-metrics b,
+.report-node-metrics i {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.report-node-metrics b {
+  color: #0b5cff;
+  background: #eef5ff;
+}
+
+.report-node-metrics i {
+  color: #4e5969;
+  background: #f4f6f9;
 }
 
 .flow-node.business-report.selected {
@@ -176,8 +244,8 @@
 }
 
 .flow-node.business-report.mindmap {
-  width: 236px;
-  min-height: 94px;
+  width: 246px;
+  min-height: 98px;
   border-top: 0;
   border-color: #d9dde5;
   box-shadow: 0 6px 16px rgb(31 35 41 / 7%);
@@ -204,12 +272,26 @@
 
 .flow-node.business-report.mindmap-leaf {
   min-height: 58px;
+  width: 220px;
   border-top: 0;
   border-bottom: 1px solid #1f2329;
   border-left: 0;
   border-right: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.flow-node.business-report.mindmap-leaf .report-node-metrics {
+  display: none;
+}
+
+.react-flow__node-draggable {
+  cursor: grab;
+}
+
+.react-flow__node-dragging {
+  cursor: grabbing;
+  z-index: 20 !important;
 }
 
 .flow-node.business-recruiting {
@@ -231,6 +313,12 @@
   border: 1px solid #c7ddff;
   border-radius: 999px;
   font-size: 12px;
+}
+
+.flow-node.business-report.report-depth-0 .node-note-button {
+  color: #123f8c;
+  background: #ffffff;
+  border-color: #ffffff;
 }
 
 .node-detail-panel {
