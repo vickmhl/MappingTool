@@ -518,11 +518,11 @@ function buildMindMapPositions(
   const positions = new Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }>();
   if (!root) return positions;
 
-  const rootX = 620;
-  const rootY = 320;
-  const primaryGapX = 360;
-  const depthGapX = 280;
-  const rowGap = 112;
+  const rootX = 560;
+  const rootY = 310;
+  const primaryGapX = 238;
+  const depthGapX = 152;
+  const rowGap = 92;
   positions.set(root, { x: rootX, y: rootY, side: 'root' });
 
   const visibleChildrenOf = (name: string): string[] =>
@@ -570,8 +570,24 @@ function buildMindMapPositions(
 
   const directChildren = visibleChildrenOf(root);
   const primaryBranches = directChildren.length > 0 ? directChildren : orderedRoots.filter((name) => name !== root);
-  const leftBranches = primaryBranches.filter((_, index) => index % 2 === 0);
-  const rightBranches = primaryBranches.filter((_, index) => index % 2 === 1);
+  const leftBranches: string[] = [];
+  const rightBranches: string[] = [];
+  let leftUnits = 0;
+  let rightUnits = 0;
+  const sortedBranches = primaryBranches
+    .slice()
+    .sort((a, b) => subtreeUnits(b, new Set([root])) - subtreeUnits(a, new Set([root])));
+
+  for (const branch of sortedBranches) {
+    const units = subtreeUnits(branch, new Set([root]));
+    if (rightUnits <= leftUnits) {
+      rightBranches.push(branch);
+      rightUnits += units;
+    } else {
+      leftBranches.push(branch);
+      leftUnits += units;
+    }
+  }
 
   const placeBranchGroup = (branchRoots: string[], side: 'left' | 'right') => {
     const units = branchRoots.map((name) => subtreeUnits(name, new Set([root])));
