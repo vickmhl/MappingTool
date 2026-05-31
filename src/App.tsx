@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Save,
   ShieldCheck,
+  SlidersHorizontal,
   Upload,
   Users,
   X,
@@ -115,6 +116,34 @@ function canvasViewLabel(view: CanvasViewKey): string {
     recruiting: '招聘模式 · 常规架构图',
     detail: '招聘模式 · 树状图',
   }[view];
+}
+
+const DEMO_LAYOUT_STORAGE_KEY = 'mapping-tool-demo-layouts-v1';
+
+function loadDemoCanvasLayouts(): AppState['canvasLayouts'] | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = window.localStorage.getItem(DEMO_LAYOUT_STORAGE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return undefined;
+    return parsed as AppState['canvasLayouts'];
+  } catch {
+    return undefined;
+  }
+}
+
+function persistDemoCanvasLayouts(layouts: AppState['canvasLayouts'] | undefined): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!layouts || Object.keys(layouts).length === 0) {
+      window.localStorage.removeItem(DEMO_LAYOUT_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(DEMO_LAYOUT_STORAGE_KEY, JSON.stringify(layouts));
+  } catch {
+    // Demo layouts are a convenience cache; failing to save them must not block editing.
+  }
 }
 
 function isVirtualDemoState(state: AppState): boolean {
@@ -254,6 +283,7 @@ function App() {
     demo.project.settings.orgChartMode = 'formal';
     demo.project.settings.defaultVisibleNodeLimit = 32;
     demo.project.settings.reportTemplate = 'executive';
+    demo.canvasLayouts = loadDemoCanvasLayouts();
     setState(appendAudit(demo, 'demo-loaded', '载入大规模地图业务虚拟样例', { entityCount: demo.people.length, view: 'map' }));
     setFilters({ ...defaultFilters, visibleLimit: 32, maxDepth: 1, minConfidence: 0.72 });
     setOpenManualRepair(false);
@@ -361,6 +391,8 @@ function App() {
                 key={item.key}
                 className={activeView === item.key ? 'nav-item active' : 'nav-item'}
                 type="button"
+                aria-label={item.label}
+                title={item.label}
                 onClick={() => setActiveView(item.key)}
               >
                 <Icon size={18} />
@@ -654,6 +686,7 @@ function OrgMapView({
   const [editMode, setEditMode] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [showManualRepair, setShowManualRepair] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [manualPerson, setManualPerson] = useState({ name: '', title: '', department: '', company: '' });
   const [manualLine, setManualLine] = useState({ manager: '', subordinate: '' });
@@ -668,6 +701,14 @@ function OrgMapView({
   const savedCount = graph.nodes.filter((node) => savedPositions[node.id]).length;
   const selectedGraphNode = graph.nodes.find((node) => node.id === selectedNodeId);
   const hasOrgData = state.people.length > 0 || state.reportingLines.length > 0 || state.orgUnits.length > 0;
+  const activeFilterCount = [
+    filters.company,
+    filters.search.trim(),
+    filters.focusPersonName.trim(),
+    filters.minConfidence !== canvasPresets[activeView].filters.minConfidence,
+    filters.visibleLimit !== canvasPresets[activeView].filters.visibleLimit,
+    filters.maxDepth !== canvasPresets[activeView].filters.maxDepth,
+  ].filter(Boolean).length;
 
   useEffect(() => {
     if (!openManualRepair) return;
@@ -719,6 +760,7 @@ function OrgMapView({
           updatedAt: timestamp,
         },
       };
+      if (isVirtualDemoState(next)) persistDemoCanvasLayouts(next.canvasLayouts);
       next.project.updatedAt = timestamp;
       return appendAudit(next, 'canvas-layout-saved', `保存${canvasViewLabel(activeView)}画布`, {
         entityCount: Object.keys(visiblePositions).length,
@@ -733,6 +775,7 @@ function OrgMapView({
       const layouts = { ...(next.canvasLayouts ?? {}) };
       delete layouts[layoutId];
       next.canvasLayouts = layouts;
+      if (isVirtualDemoState(next)) persistDemoCanvasLayouts(next.canvasLayouts);
       next.project.updatedAt = new Date().toISOString();
       return appendAudit(next, 'canvas-layout-reset', `重置${canvasViewLabel(activeView)}画布`, { view: 'map' });
     });
@@ -998,6 +1041,7 @@ function OrgMapView({
           updatedAt: timestamp,
         },
       };
+      if (isVirtualDemoState(next)) persistDemoCanvasLayouts(next.canvasLayouts);
       next.project.updatedAt = timestamp;
       return next;
     });
@@ -1073,6 +1117,14 @@ function OrgMapView({
           ))}
         </div>
         <div className="canvas-actions primary-canvas-actions">
+          <button
+            type="button"
+            className={showFilters || activeFilterCount > 0 ? 'secondary-button active-filter' : 'secondary-button'}
+            onClick={() => setShowFilters((value) => !value)}
+          >
+            <SlidersHorizontal size={16} />
+            {showFilters ? '收起筛选' : activeFilterCount > 0 ? `筛选 ${activeFilterCount}` : '筛选'}
+          </button>
           {businessMode === 'recruiting' && (
             <>
               <button
@@ -1125,6 +1177,7 @@ function OrgMapView({
         </div>
       </div>
 
+      {showFilters && (
       <div className="map-controls primary-map-controls">
         <label>
           公司
@@ -1154,11 +1207,12 @@ function OrgMapView({
           className={showAdvancedFilters ? 'secondary-button active-filter' : 'secondary-button'}
           onClick={() => setShowAdvancedFilters((value) => !value)}
         >
-          筛选
+          {showAdvancedFilters ? '收起高级' : '高级'}
         </button>
       </div>
+      )}
 
-      {showAdvancedFilters && (
+      {showFilters && showAdvancedFilters && (
         <div className="map-controls advanced-map-controls">
         <label>
           置信度 {Math.round(filters.minConfidence * 100)}%
@@ -1309,6 +1363,7 @@ function ExportView({
   exportPptx: () => void;
 }) {
   const previewGraph = useMemo(() => buildOrgGraph(state, filters), [state, filters]);
+  const previewNodes = previewGraph.nodes.slice(0, 7);
 
   return (
     <section className="view-stack">
@@ -1332,6 +1387,21 @@ function ExportView({
             <div className="preview-meta">
               {previewGraph.nodes.length} 个节点 · {previewGraph.edges.length} 条线
             </div>
+            {previewNodes.length > 0 ? (
+              <>
+                <div className="export-mini-chart">
+                  {previewNodes.map((node, index) => (
+                    <span key={node.id} className={index === 0 ? 'root' : ''}>
+                      <strong>{node.department ?? node.company ?? node.label}</strong>
+                      <em>{node.title ? `${node.title}：${node.label}` : node.label}</em>
+                    </span>
+                  ))}
+                </div>
+                <p>导出会按当前模式、筛选条件和画布布局生成 PPTX / PNG。</p>
+              </>
+            ) : (
+              <p>暂无可导出的组织图，请先上传资料或打开虚拟演示Demo。</p>
+            )}
           </div>
         </section>
 
