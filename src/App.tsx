@@ -46,6 +46,7 @@ import type {
   CandidateRecord,
   ChangeCandidatePayload,
   OrgChartMode,
+  OrgChartExportFormat,
   OrgMapFilters,
   OrgUnitCandidatePayload,
   PersonCandidatePayload,
@@ -90,8 +91,8 @@ const canvasPresets: Record<
     filters: Pick<OrgMapFilters, 'minConfidence' | 'visibleLimit' | 'maxDepth'>;
   }
 > = {
-  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 32, maxDepth: 1 } },
-  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 32, maxDepth: 1 } },
+  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 42, maxDepth: 2 } },
+  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 24, maxDepth: 1 } },
   recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 160, maxDepth: 3 } },
   detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 160, maxDepth: 3 } },
 };
@@ -279,13 +280,13 @@ function App() {
   function loadMapBusinessDemo(): void {
     demoSession.current = true;
     const demo = createMapBusinessDemoState();
-    demo.project.settings.activeCanvasView = 'mindmap';
+    demo.project.settings.activeCanvasView = 'executive';
     demo.project.settings.orgChartMode = 'formal';
-    demo.project.settings.defaultVisibleNodeLimit = 32;
+    demo.project.settings.defaultVisibleNodeLimit = canvasPresets.executive.filters.visibleLimit;
     demo.project.settings.reportTemplate = 'executive';
     demo.canvasLayouts = loadDemoCanvasLayouts();
     setState(appendAudit(demo, 'demo-loaded', '载入大规模地图业务虚拟样例', { entityCount: demo.people.length, view: 'map' }));
-    setFilters({ ...defaultFilters, visibleLimit: 32, maxDepth: 1, minConfidence: 0.72 });
+    setFilters({ ...defaultFilters, ...canvasPresets.executive.filters });
     setOpenManualRepair(false);
     setActiveView('map');
     setToast('已载入虚拟演示Demo');
@@ -352,7 +353,7 @@ function App() {
       fetch(dataUrl)
         .then((response) => response.blob())
         .then((blob) => {
-          downloadBlob(blob, `${state.project.name}-org-map.png`);
+          downloadBlob(blob, `${state.project.name}-${state.project.settings.orgChartExportFormat}.png`);
           setState((current) => appendAudit(current, 'export', '导出组织图 PNG', { entityCount: graph.nodes.length, view: 'export' }));
         });
     } catch (error) {
@@ -368,6 +369,20 @@ function App() {
     } catch (error) {
       setToast(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  function setExportFormat(format: OrgChartExportFormat): void {
+    setState((current) => ({
+      ...current,
+      project: {
+        ...current.project,
+        updatedAt: new Date().toISOString(),
+        settings: {
+          ...current.project.settings,
+          orgChartExportFormat: format,
+        },
+      },
+    }));
   }
 
   return (
@@ -447,6 +462,7 @@ function App() {
             filters={filters}
             password={password}
             setPassword={setPassword}
+            setExportFormat={setExportFormat}
             exportPackage={exportPackage}
             importPackage={importPackage}
             exportPng={exportPng}
@@ -1348,6 +1364,7 @@ function ExportView({
   filters,
   password,
   setPassword,
+  setExportFormat,
   exportPackage,
   importPackage,
   exportPng,
@@ -1357,13 +1374,22 @@ function ExportView({
   filters: OrgMapFilters;
   password: string;
   setPassword: (value: string) => void;
+  setExportFormat: (format: OrgChartExportFormat) => void;
   exportPackage: () => void;
   importPackage: (file: File | undefined) => void;
   exportPng: () => void;
   exportPptx: () => void;
 }) {
   const previewGraph = useMemo(() => buildOrgGraph(state, filters), [state, filters]);
-  const previewNodes = previewGraph.nodes.slice(0, 7);
+  const exportFormat = state.project.settings.orgChartExportFormat;
+  const previewImage = useMemo(() => {
+    if (previewGraph.nodes.length === 0) return '';
+    try {
+      return exportOrgGraphPng(state, filters, undefined, exportFormat);
+    } catch {
+      return '';
+    }
+  }, [exportFormat, filters, previewGraph.nodes.length, state]);
 
   return (
     <section className="view-stack">
@@ -1372,6 +1398,22 @@ function ExportView({
           <div className="section-heading">
             <h2>导出</h2>
             <span className="small-badge">{canvasViewLabel(state.project.settings.activeCanvasView)}</span>
+          </div>
+          <div className="button-row export-format-row">
+            {([
+              ['ppt16x9', 'PPT 16:9'],
+              ['a4Landscape', 'A4 横版'],
+              ['longImage', '长图'],
+            ] as Array<[OrgChartExportFormat, string]>).map(([format, label]) => (
+              <button
+                key={format}
+                type="button"
+                className={exportFormat === format ? 'secondary-button export-format-chip active' : 'secondary-button export-format-chip'}
+                onClick={() => setExportFormat(format)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
           <div className="button-row">
             <button type="button" className="primary-button" onClick={exportPptx}>
@@ -1385,19 +1427,13 @@ function ExportView({
           </div>
           <div className="export-preview">
             <div className="preview-meta">
-              {previewGraph.nodes.length} 个节点 · {previewGraph.edges.length} 条线
+              <span>{previewGraph.nodes.length} 个节点 · {previewGraph.edges.length} 条线</span>
+              <strong>使用当前画布布局</strong>
             </div>
-            {previewNodes.length > 0 ? (
+            {previewImage ? (
               <>
-                <div className="export-mini-chart">
-                  {previewNodes.map((node, index) => (
-                    <span key={node.id} className={index === 0 ? 'root' : ''}>
-                      <strong>{node.department ?? node.company ?? node.label}</strong>
-                      <em>{node.title ? `${node.title}：${node.label}` : node.label}</em>
-                    </span>
-                  ))}
-                </div>
-                <p>导出会按当前模式、筛选条件和画布布局生成 PPTX / PNG。</p>
+                <img src={previewImage} alt="导出预览" className="export-preview-image" />
+                <p>当前模式、筛选条件和手动布局会直接进入导出结果。</p>
               </>
             ) : (
               <p>暂无可导出的组织图，请先上传资料或打开虚拟演示Demo。</p>
