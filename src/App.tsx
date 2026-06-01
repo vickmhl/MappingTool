@@ -95,7 +95,7 @@ const canvasPresets: Record<
 > = {
   executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
   mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
-  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 36, maxDepth: 1 } },
+  recruiting: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 48, maxDepth: 2 } },
   detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 60, maxDepth: 2 } },
 };
 
@@ -1059,7 +1059,7 @@ function OrgMapView({
   useEffect(() => {
     if (!flowInstance || nodes.length === 0 || editMode) return;
     const timer = window.setTimeout(() => {
-      const fitPrimaryBounds = (depthLimit: number, padding: number) => {
+      const fitPrimaryBounds = (depthLimit: number, padding: number, nodeWidth: number, nodeHeight: number) => {
         const primaryNodes = graph.nodes.filter((node) => node.depth <= depthLimit);
         if (primaryNodes.length === 0) {
           void flowInstance.fitView({ duration: 260, padding, includeHiddenNodes: false });
@@ -1073,8 +1073,8 @@ function OrgMapView({
           {
             x: minX - 32,
             y: minY - 32,
-            width: maxX - minX + 250 + 64,
-            height: maxY - minY + 116 + 64,
+            width: maxX - minX + nodeWidth + 64,
+            height: maxY - minY + nodeHeight + 64,
           },
           { duration: 260, padding },
         );
@@ -1091,11 +1091,11 @@ function OrgMapView({
       }
 
       if (isReportMode) {
-        fitPrimaryBounds(2, 0.16);
+        fitPrimaryBounds(2, 0.16, 240, 116);
         return;
       }
 
-      fitPrimaryBounds(filters.maxDepth <= 1 ? 1 : 2, 0.14);
+      fitPrimaryBounds(Math.min(filters.maxDepth, 2), 0.1, 198, 96);
     }, 80);
 
     return () => window.clearTimeout(timer);

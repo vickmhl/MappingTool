@@ -10,6 +10,11 @@ const FORMAL_CARD_WIDTH = 250;
 const FORMAL_CARD_HEIGHT = 116;
 const FORMAL_X_GAP = 84;
 const FORMAL_Y_GAP = 168;
+const RECRUITING_CARD_WIDTH = 198;
+const RECRUITING_CARD_HEIGHT = 96;
+const RECRUITING_GROUP_GAP_X = 30;
+const RECRUITING_ROOT_GAP_Y = 86;
+const RECRUITING_LEVEL_GAP_Y = 24;
 
 export interface OrgGraphNode {
   id: string;
@@ -382,7 +387,9 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       ? buildMindMapPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
       : isReportView
         ? buildExecutivePositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
-        : buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
+        : activeCanvasView === 'recruiting'
+          ? buildRecruitingPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
+          : buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
     : buildExplorePositions(limitedPeople, layout, depthByName);
 
   const laneByName = new Map<string, string>();
@@ -488,6 +495,123 @@ function buildExplorePositions(
   }
 
   return positions;
+}
+
+interface RecruitingSubtreeLayout {
+  width: number;
+  height: number;
+  children: Array<{
+    name: string;
+    offsetX: number;
+    offsetY: number;
+    subtree: RecruitingSubtreeLayout;
+  }>;
+}
+
+function buildRecruitingPositions(
+  people: Person[],
+  peopleByName: Map<string, Person>,
+  childrenByManager: Map<string, string[]>,
+  managerBySubordinate: Map<string, string>,
+  depthByName: Map<string, number>,
+  layout: CanvasLayout | undefined,
+): Map<string, { x: number; y: number }> {
+  const visibleNames = new Set(people.map((person) => normalizeName(person.name)));
+  const roots = people
+    .map((person) => normalizeName(person.name))
+    .filter((name) => !managerBySubordinate.has(name) || !visibleNames.has(managerBySubordinate.get(name)!));
+  const orderedRoots = sortNamesByPerson(roots, peopleByName, depthByName);
+  const visibleChildrenOf = (name: string): string[] =>
+    sortNamesByPerson(
+      (childrenByManager.get(name) ?? []).filter((child) => visibleNames.has(child)),
+      peopleByName,
+      depthByName,
+    );
+
+  const measureSubtree = (name: string, depth: number, ancestry: Set<string>): RecruitingSubtreeLayout => {
+    if (ancestry.has(name)) {
+      return { width: RECRUITING_CARD_WIDTH, height: RECRUITING_CARD_HEIGHT, children: [] };
+    }
+
+    const nextAncestry = new Set(ancestry);
+    nextAncestry.add(name);
+    const children = visibleChildrenOf(name).filter((child) => !nextAncestry.has(child));
+    if (children.length === 0) {
+      return { width: RECRUITING_CARD_WIDTH, height: RECRUITING_CARD_HEIGHT, children: [] };
+    }
+
+    const columns =
+      depth === 0
+        ? children.length
+        : depth === 1
+          ? children.length >= 8
+            ? 2
+            : 1
+          : depth === 2
+            ? children.length >= 6
+              ? 2
+              : 1
+            : 1;
+    const rows = chunkNames(children, Math.max(1, columns));
+    const rowGapY = depth === 0 ? RECRUITING_ROOT_GAP_Y : RECRUITING_LEVEL_GAP_Y;
+    const rowData = rows.map((row) => {
+      const measured = row.map((child) => ({
+        name: child,
+        subtree: measureSubtree(child, depth + 1, nextAncestry),
+      }));
+      return {
+        measured,
+        width:
+          measured.reduce((sum, child) => sum + child.subtree.width, 0) +
+          Math.max(0, measured.length - 1) * RECRUITING_GROUP_GAP_X,
+        height: Math.max(RECRUITING_CARD_HEIGHT, ...measured.map((child) => child.subtree.height)),
+      };
+    });
+
+    const width = Math.max(RECRUITING_CARD_WIDTH, ...rowData.map((row) => row.width));
+    let cursorY = RECRUITING_CARD_HEIGHT + rowGapY;
+    const placedChildren: RecruitingSubtreeLayout['children'] = [];
+
+    for (const row of rowData) {
+      let cursorX = (width - row.width) / 2;
+      for (const child of row.measured) {
+        placedChildren.push({
+          name: child.name,
+          offsetX: cursorX,
+          offsetY: cursorY,
+          subtree: child.subtree,
+        });
+        cursorX += child.subtree.width + RECRUITING_GROUP_GAP_X;
+      }
+      cursorY += row.height + RECRUITING_LEVEL_GAP_Y;
+    }
+
+    return {
+      width,
+      height: Math.max(RECRUITING_CARD_HEIGHT, cursorY - RECRUITING_LEVEL_GAP_Y),
+      children: placedChildren,
+    };
+  };
+
+  const positions = new Map<string, { x: number; y: number }>();
+  const placeSubtree = (name: string, subtree: RecruitingSubtreeLayout, originX: number, originY: number): void => {
+    positions.set(name, {
+      x: originX + subtree.width / 2 - RECRUITING_CARD_WIDTH / 2,
+      y: originY,
+    });
+    for (const child of subtree.children) {
+      placeSubtree(child.name, child.subtree, originX + child.offsetX, originY + child.offsetY);
+    }
+  };
+
+  let cursorX = 72;
+  for (const root of orderedRoots) {
+    const subtree = measureSubtree(root, 0, new Set());
+    placeSubtree(root, subtree, cursorX, 56);
+    cursorX += subtree.width + 108;
+  }
+
+  return applySavedPositions(positions, people, layout);
 }
 
 function applySavedPositions<T extends { x: number; y: number }>(

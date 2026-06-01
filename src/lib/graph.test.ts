@@ -72,4 +72,29 @@ describe('org graph performance', () => {
     expect(maxX - minX).toBeLessThan(3400);
     expect(graph.nodes.filter((node) => node.depth === 1).length).toBeGreaterThanOrEqual(8);
   });
+
+  it('keeps the recruiting regular chart grouped by top-level branches instead of spreading by depth lanes', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'recruiting';
+
+    const graph = buildOrgGraph(state, {
+      company: '',
+      search: '',
+      focusPersonName: '',
+      minConfidence: 0.55,
+      visibleLimit: 48,
+      maxDepth: 2,
+    });
+
+    const minX = Math.min(...graph.nodes.map((node) => node.x));
+    const maxX = Math.max(...graph.nodes.map((node) => node.x));
+    const l1Nodes = graph.nodes.filter((node) => node.depth === 1);
+    const l2Nodes = graph.nodes.filter((node) => node.depth === 2);
+
+    expect(maxX - minX).toBeLessThan(3600);
+    expect(l1Nodes.length).toBeGreaterThanOrEqual(8);
+    expect(l2Nodes.length).toBeGreaterThanOrEqual(20);
+    expect(new Set(l2Nodes.map((node) => node.y)).size).toBeGreaterThan(2);
+  });
 });
