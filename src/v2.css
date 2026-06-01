@@ -212,6 +212,15 @@
     linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
 }
 
+.react-flow__node-default {
+  width: auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .flow-node.business-report {
   width: 240px;
   min-height: 110px;
@@ -367,9 +376,11 @@
 }
 
 .flow-node.business-recruiting {
-  width: 212px;
-  min-height: 102px;
+  width: 198px;
+  min-height: 96px;
+  padding: 12px 14px 11px;
   border-top-color: #8ea2bb;
+  box-shadow: 0 8px 18px rgb(15 23 42 / 6%);
 }
 
 .flow-node.business-recruiting .flow-node-meta .talent-pill {

@@ -95,8 +95,8 @@ const canvasPresets: Record<
 > = {
   executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
   mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
-  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 120, maxDepth: 3 } },
-  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 120, maxDepth: 3 } },
+  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 72, maxDepth: 2 } },
+  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 84, maxDepth: 2 } },
 };
 
 function canvasViewForMode(mode: OrgBusinessMode, style: OrgChartStyle): CanvasViewKey {
@@ -1181,7 +1181,7 @@ function OrgMapView({
                   setFilters({
                     ...filters,
                     maxDepth: Math.min(filters.maxDepth + 1, 8),
-                    visibleLimit: Math.min(filters.visibleLimit + 80, 600),
+                    visibleLimit: Math.min(filters.visibleLimit + 36, 240),
                   })
                 }
               >
@@ -1359,8 +1359,8 @@ function OrgMapView({
             nodes={nodes}
             edges={edges}
             fitView
-            fitViewOptions={{ padding: isTree ? 0.12 : 0.045, includeHiddenNodes: false }}
-            minZoom={isTree ? 0.06 : 0.18}
+            fitViewOptions={{ padding: isTree ? 0.12 : 0.08, includeHiddenNodes: false }}
+            minZoom={isTree ? 0.06 : 0.22}
             maxZoom={1.6}
             nodesDraggable={editMode}
             elementsSelectable={editMode}
