@@ -1069,13 +1069,18 @@ function OrgMapView({
         return;
       }
 
+      if (isReportMode) {
+        void flowInstance.fitView({ duration: 260, padding: 0.12, includeHiddenNodes: false });
+        return;
+      }
+
       const rootGraphNode = graph.nodes.find((node) => node.depth === 0);
       if (!rootGraphNode) {
         void flowInstance.fitView({ duration: 260, padding: 0.08, includeHiddenNodes: false });
         return;
       }
 
-      const zoom = isReportMode ? 0.86 : 0.7;
+      const zoom = 0.7;
       void flowInstance.setCenter(rootGraphNode.x + 120, rootGraphNode.y + (isReportMode ? 210 : 260), {
         zoom,
         duration: 260,

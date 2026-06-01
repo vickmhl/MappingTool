@@ -380,7 +380,9 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
   const positions: Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> = mode === 'formal'
     ? isMindMap
       ? buildMindMapPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
-      : buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
+      : isReportView
+        ? buildExecutivePositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
+        : buildFormalPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
     : buildExplorePositions(limitedPeople, layout, depthByName);
 
   const laneByName = new Map<string, string>();
@@ -578,6 +580,102 @@ function buildFormalPositions(
   return applySavedPositions(positions, people, layout);
 }
 
+function buildExecutivePositions(
+  people: Person[],
+  peopleByName: Map<string, Person>,
+  childrenByManager: Map<string, string[]>,
+  managerBySubordinate: Map<string, string>,
+  depthByName: Map<string, number>,
+  layout: CanvasLayout | undefined,
+): Map<string, { x: number; y: number }> {
+  const visibleNames = new Set(people.map((person) => normalizeName(person.name)));
+  const roots = people
+    .map((person) => normalizeName(person.name))
+    .filter((name) => !managerBySubordinate.has(name) || !visibleNames.has(managerBySubordinate.get(name)!));
+  const orderedRoots = sortNamesByPerson(roots, peopleByName, depthByName);
+  const root = orderedRoots[0];
+  if (!root) return new Map();
+
+  const positions = new Map<string, { x: number; y: number }>();
+  const groupGapX = 42;
+  const childGapX = 32;
+  const levelRootY = 72;
+  const levelOneY = 236;
+  const levelTwoY = 404;
+  const levelThreeGapY = FORMAL_CARD_HEIGHT + 34;
+
+  const visibleChildrenOf = (name: string): string[] =>
+    sortNamesByPerson(
+      (childrenByManager.get(name) ?? []).filter((child) => visibleNames.has(child)),
+      peopleByName,
+      depthByName,
+    );
+
+  const levelOneNames = visibleChildrenOf(root);
+  const levelOneGroups = levelOneNames.map((name) => {
+    const levelTwoNames = visibleChildrenOf(name).filter((child) => (depthByName.get(child) ?? 0) === 2);
+    const columns = 1;
+    const width = FORMAL_CARD_WIDTH;
+    return { name, levelTwoNames, columns, width };
+  });
+
+  const totalWidth =
+    levelOneGroups.reduce((sum, group) => sum + group.width, 0) + Math.max(0, levelOneGroups.length - 1) * groupGapX;
+  const startX = 92;
+  const rootX = levelOneGroups.length > 0 ? startX + totalWidth / 2 - FORMAL_CARD_WIDTH / 2 : startX;
+  positions.set(root, { x: rootX, y: levelRootY });
+
+  let cursorX = startX;
+  for (const group of levelOneGroups) {
+    const groupStartX = cursorX;
+    const groupCenterX = groupStartX + group.width / 2 - FORMAL_CARD_WIDTH / 2;
+    positions.set(group.name, { x: groupCenterX, y: levelOneY });
+
+    const rows = chunkNames(group.levelTwoNames, group.columns);
+    rows.forEach((rowNames, rowIndex) => {
+      const rowWidth = rowNames.length * FORMAL_CARD_WIDTH + Math.max(0, rowNames.length - 1) * childGapX;
+      const rowStartX = groupStartX + Math.max(0, (group.width - rowWidth) / 2);
+
+      rowNames.forEach((name, columnIndex) => {
+        const childX = rowStartX + columnIndex * (FORMAL_CARD_WIDTH + childGapX);
+        const childY = levelTwoY + rowIndex * (FORMAL_CARD_HEIGHT + 44);
+        positions.set(name, { x: childX, y: childY });
+
+        const levelThreeNames = visibleChildrenOf(name).filter((child) => (depthByName.get(child) ?? 0) === 3);
+        levelThreeNames.forEach((levelThreeName, levelThreeIndex) => {
+          positions.set(levelThreeName, {
+            x: childX,
+            y: childY + levelThreeGapY + levelThreeIndex * levelThreeGapY,
+          });
+        });
+      });
+    });
+
+    cursorX += group.width + groupGapX;
+  }
+
+  const trailingRoots = orderedRoots.filter((name) => name !== root);
+  let trailingX = startX + totalWidth + 120;
+  for (const name of trailingRoots) {
+    positions.set(name, { x: trailingX, y: levelOneY });
+    trailingX += FORMAL_CARD_WIDTH + groupGapX;
+  }
+
+  let fallbackX = trailingX;
+  for (const person of people) {
+    const name = normalizeName(person.name);
+    if (positions.has(name)) continue;
+    const depth = depthByName.get(name) ?? 0;
+    positions.set(name, {
+      x: fallbackX,
+      y: levelOneY + depth * 132,
+    });
+    fallbackX += FORMAL_CARD_WIDTH + childGapX;
+  }
+
+  return applySavedPositions(positions, people, layout);
+}
+
 function buildMindMapPositions(
   people: Person[],
   peopleByName: Map<string, Person>,
@@ -762,6 +860,15 @@ function buildShallowFormalPositions(
   }
 
   return positions;
+}
+
+function chunkNames(names: string[], size: number): string[][] {
+  if (size <= 0) return [names];
+  const rows: string[][] = [];
+  for (let index = 0; index < names.length; index += size) {
+    rows.push(names.slice(index, index + size));
+  }
+  return rows;
 }
 
 function buildFormalLanes(nodes: OrgGraphNode[]): OrgGraphLane[] {

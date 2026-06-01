@@ -52,4 +52,24 @@ describe('org graph performance', () => {
     expect(graph.nodes.some((node) => node.mindMapSide === 'left')).toBe(true);
     expect(graph.nodes.some((node) => node.mindMapSide === 'right')).toBe(true);
   });
+
+  it('keeps the executive report chart compact enough for first-screen reading', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'executive';
+
+    const graph = buildOrgGraph(state, {
+      company: '',
+      search: '',
+      focusPersonName: '',
+      minConfidence: 0.72,
+      visibleLimit: 28,
+      maxDepth: 2,
+    });
+
+    const minX = Math.min(...graph.nodes.map((node) => node.x));
+    const maxX = Math.max(...graph.nodes.map((node) => node.x));
+    expect(maxX - minX).toBeLessThan(3400);
+    expect(graph.nodes.filter((node) => node.depth === 1).length).toBeGreaterThanOrEqual(8);
+  });
 });
