@@ -7,10 +7,12 @@ import {
   Inbox,
   Lock,
   Maximize2,
+  MoreHorizontal,
   Move,
   Network,
   RotateCcw,
   Save,
+  Search,
   ShieldCheck,
   SlidersHorizontal,
   Upload,
@@ -79,8 +81,8 @@ const defaultFilters: OrgMapFilters = {
   search: '',
   focusPersonName: '',
   minConfidence: 0.72,
-  visibleLimit: 32,
-  maxDepth: 1,
+  visibleLimit: 28,
+  maxDepth: 2,
 };
 
 const canvasPresets: Record<
@@ -91,10 +93,10 @@ const canvasPresets: Record<
     filters: Pick<OrgMapFilters, 'minConfidence' | 'visibleLimit' | 'maxDepth'>;
   }
 > = {
-  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 42, maxDepth: 2 } },
-  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 24, maxDepth: 1 } },
-  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 160, maxDepth: 3 } },
-  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 160, maxDepth: 3 } },
+  executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
+  mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
+  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 120, maxDepth: 3 } },
+  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 120, maxDepth: 3 } },
 };
 
 function canvasViewForMode(mode: OrgBusinessMode, style: OrgChartStyle): CanvasViewKey {
@@ -720,7 +722,6 @@ function OrgMapView({
   const activeFilterCount = [
     filters.company,
     filters.search.trim(),
-    filters.focusPersonName.trim(),
     filters.minConfidence !== canvasPresets[activeView].filters.minConfidence,
     filters.visibleLimit !== canvasPresets[activeView].filters.visibleLimit,
     filters.maxDepth !== canvasPresets[activeView].filters.maxDepth,
@@ -945,7 +946,8 @@ function OrgMapView({
                       <strong>{departmentLabel}</strong>
                       <small>{node.depth === 0 ? '集团' : `L${node.depth}`}</small>
                     </div>
-                    <span>{node.title ?? '负责人'}：{node.label}</span>
+                    <span>一号位 {node.label}</span>
+                    <em>{node.title ?? '负责人待确认'}</em>
                     <div className="report-node-metrics">
                       <b>{reportCount} 人</b>
                       <i>{node.visibleSpan} 直属</i>
@@ -1017,8 +1019,8 @@ function OrgMapView({
           targetHandle: isTree && targetSide === 'left' ? 'target-right' : isTree && targetSide === 'right' ? 'target-left' : undefined,
           type: isTree ? 'straight' : 'step',
           style: {
-            stroke: edge.confidence < 0.72 ? '#d54941' : isTree ? '#1f2329' : '#1677ff',
-            strokeWidth: isTree ? 1.05 : 1.35,
+            stroke: edge.confidence < 0.72 ? '#d92d20' : isTree ? '#7d8da1' : '#8da2bf',
+            strokeWidth: isTree ? 1.35 : 1.7,
             strokeDasharray: edge.confidence < 0.75 || edge.relationType === 'dotted-line' ? '6 5' : undefined,
           },
           className: ['org-edge', isTree ? 'mindmap-edge' : 'formal-edge'].join(' '),
@@ -1064,18 +1066,39 @@ function OrgMapView({
   };
 
   const selectedDepartment = selectedGraphNode?.department ?? selectedGraphNode?.company ?? '未归属部门';
+  const selectedPersonRecord = selectedGraphNode
+    ? state.people.find((person) => normalizeName(person.name) === normalizeName(selectedGraphNode.label))
+    : undefined;
+  const selectedManager = selectedGraphNode
+    ? state.reportingLines.find(
+        (line) =>
+          line.isCurrent &&
+          normalizeName(line.subordinateName) === normalizeName(selectedGraphNode.label),
+      )?.managerName
+    : undefined;
+  const selectedDirectReports = selectedGraphNode
+    ? state.reportingLines
+        .filter(
+          (line) =>
+            line.isCurrent &&
+            normalizeName(line.managerName) === normalizeName(selectedGraphNode.label),
+        )
+        .map((line) => line.subordinateName)
+        .slice(0, 8)
+    : [];
   const selectedRemarks = selectedGraphNode
     ? [
+        ...(selectedPersonRecord?.sensitiveNote ? [selectedPersonRecord.sensitiveNote] : []),
         ...state.changeEvents
           .filter((event) => {
             const samePerson = event.personName && normalizeName(event.personName) === normalizeName(selectedGraphNode.label);
             const sameDepartment = selectedGraphNode.department && event.description.includes(selectedGraphNode.department);
             return samePerson || sameDepartment;
           })
-          .slice(0, 5)
+          .slice(0, 6)
           .map((event) => event.description),
-        ...(selectedGraphNode.averageConfidence < 0.75 ? ['存在低置信度来源，汇报前需复核。'] : []),
-        ...(selectedGraphNode.hiddenDirectCount > 0 ? [`已收起 ${selectedGraphNode.hiddenDirectCount} 个下钻人员。`] : []),
+        ...(selectedGraphNode.averageConfidence < 0.75 ? ['存在低置信度来源，正式汇报前建议复核。'] : []),
+        ...(selectedGraphNode.hiddenDirectCount > 0 ? [`当前已收起 ${selectedGraphNode.hiddenDirectCount} 个下钻人员。`] : []),
         ...(selectedGraphNode.span === 0 ? ['暂未识别到直属下属。'] : []),
       ]
     : [];
@@ -1132,6 +1155,14 @@ function OrgMapView({
             </button>
           ))}
         </div>
+        <label className="canvas-search-field">
+          <Search size={16} />
+          <input
+            value={filters.search}
+            placeholder="搜索姓名 / 岗位 / 部门"
+            onChange={(event) => setFilters({ ...filters, search: event.target.value })}
+          />
+        </label>
         <div className="canvas-actions primary-canvas-actions">
           <button
             type="button"
@@ -1146,12 +1177,29 @@ function OrgMapView({
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => setFilters({ ...filters, maxDepth: Math.min(filters.maxDepth + 1, 8), visibleLimit: Math.min(filters.visibleLimit + 120, 600) })}
+                onClick={() =>
+                  setFilters({
+                    ...filters,
+                    maxDepth: Math.min(filters.maxDepth + 1, 8),
+                    visibleLimit: Math.min(filters.visibleLimit + 80, 600),
+                  })
+                }
               >
                 <Maximize2 size={16} />
                 展开更多
               </button>
-              <button type="button" className="secondary-button" onClick={() => setFilters({ ...filters, maxDepth: 2, visibleLimit: 160 })}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  setFilters({
+                    ...filters,
+                    maxDepth: canvasPresets[activeView].filters.maxDepth,
+                    visibleLimit: canvasPresets[activeView].filters.visibleLimit,
+                    focusPersonName: '',
+                  })
+                }
+              >
                 <RotateCcw size={16} />
                 折叠部门
               </button>
@@ -1161,21 +1209,26 @@ function OrgMapView({
             <Maximize2 size={16} />
             适配画布
           </button>
+          <button
+            type="button"
+            className={editMode ? 'secondary-button active-filter' : 'secondary-button'}
+            onClick={() => setEditMode((value) => !value)}
+          >
+            {editMode ? <Lock size={16} /> : <Move size={16} />}
+            {editMode ? '结束编辑' : '编辑布局'}
+          </button>
+          {editMode && (
+            <button type="button" className="secondary-button" onClick={saveVisibleLayout}>
+              <Save size={16} />
+              保存布局
+            </button>
+          )}
           <details className="canvas-more-actions">
-            <summary>操作</summary>
+            <summary>
+              <MoreHorizontal size={16} />
+              更多
+            </summary>
             <div>
-              <button
-                type="button"
-                className={editMode ? 'secondary-button active-filter' : 'secondary-button'}
-                onClick={() => setEditMode((value) => !value)}
-              >
-                {editMode ? <Lock size={16} /> : <Move size={16} />}
-                {editMode ? '结束编辑' : '编辑布局'}
-              </button>
-              <button type="button" className="secondary-button" onClick={saveVisibleLayout} disabled={!editMode}>
-                <Save size={16} />
-                保存布局
-              </button>
               <button
                 type="button"
                 className={showManualRepair ? 'secondary-button active-filter' : 'secondary-button'}
@@ -1184,9 +1237,17 @@ function OrgMapView({
                 <Users size={16} />
                 手动补充
               </button>
+              <button
+                type="button"
+                className={showAdvancedFilters ? 'secondary-button active-filter' : 'secondary-button'}
+                onClick={() => setShowAdvancedFilters((value) => !value)}
+              >
+                <SlidersHorizontal size={16} />
+                {showAdvancedFilters ? '收起高级' : '高级筛选'}
+              </button>
               <button type="button" className="secondary-button" onClick={resetLayout} disabled={savedCount === 0}>
                 <RotateCcw size={16} />
-                自动布局
+                重新布局
               </button>
             </div>
           </details>
@@ -1194,73 +1255,70 @@ function OrgMapView({
       </div>
 
       {showFilters && (
-      <div className="map-controls primary-map-controls">
-        <label>
-          公司
-          <select value={filters.company} onChange={(event) => setFilters({ ...filters, company: event.target.value })}>
-            <option value="">全部</option>
-            {state.project.companies.map((company) => (
-              <option key={company} value={company}>
-                {company}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          搜索
-          <input value={filters.search} placeholder="姓名/岗位/部门" onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
-        </label>
-        <label>
-          负责人
-          <input
-            value={filters.focusPersonName}
-            placeholder="姓名"
-            onChange={(event) => setFilters({ ...filters, focusPersonName: event.target.value })}
-          />
-        </label>
-        <button
-          type="button"
-          className={showAdvancedFilters ? 'secondary-button active-filter' : 'secondary-button'}
-          onClick={() => setShowAdvancedFilters((value) => !value)}
-        >
-          {showAdvancedFilters ? '收起高级' : '高级'}
-        </button>
-      </div>
+        <div className="map-controls primary-map-controls">
+          <label>
+            公司
+            <select value={filters.company} onChange={(event) => setFilters({ ...filters, company: event.target.value })}>
+              <option value="">全部</option>
+              {state.project.companies.map((company) => (
+                <option key={company} value={company}>
+                  {company}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            置信度 {Math.round(filters.minConfidence * 100)}%
+            <input
+              type="range"
+              min="0"
+              max="0.95"
+              step="0.05"
+              value={filters.minConfidence}
+              onChange={(event) => setFilters({ ...filters, minConfidence: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            节点上限
+            <input
+              type="number"
+              min="20"
+              max="600"
+              value={filters.visibleLimit}
+              onChange={(event) => setFilters({ ...filters, visibleLimit: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            层级
+            <input
+              type="number"
+              min="1"
+              max="8"
+              value={filters.maxDepth}
+              onChange={(event) => setFilters({ ...filters, maxDepth: Number(event.target.value) })}
+            />
+          </label>
+        </div>
       )}
 
       {showFilters && showAdvancedFilters && (
         <div className="map-controls advanced-map-controls">
-        <label>
-          置信度 {Math.round(filters.minConfidence * 100)}%
-          <input
-            type="range"
-            min="0"
-            max="0.95"
-            step="0.05"
-            value={filters.minConfidence}
-            onChange={(event) => setFilters({ ...filters, minConfidence: Number(event.target.value) })}
-          />
-        </label>
-        <label>
-          节点上限
-          <input
-            type="number"
-            min="30"
-            max="600"
-            value={filters.visibleLimit}
-            onChange={(event) => setFilters({ ...filters, visibleLimit: Number(event.target.value) })}
-          />
-        </label>
-        <label>
-          层级
-          <input
-            type="number"
-            min="1"
-            max="8"
-            value={filters.maxDepth}
-            onChange={(event) => setFilters({ ...filters, maxDepth: Number(event.target.value) })}
-          />
-        </label>
+          <label>
+            负责人聚焦
+            <input
+              value={filters.focusPersonName}
+              placeholder="输入姓名聚焦上下级链路"
+              onChange={(event) => setFilters({ ...filters, focusPersonName: event.target.value })}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setFilters({ ...canvasPresets[activeView].filters, company: '', search: '', focusPersonName: '' })}
+          >
+            <RotateCcw size={16} />
+            重置筛选
+          </button>
         </div>
       )}
 
@@ -1295,64 +1353,98 @@ function OrgMapView({
 
       {graph.truncated && <div className="inline-warning">当前筛选命中 {graph.totalBeforeLimit} 人，仅渲染前 {filters.visibleLimit} 个节点。</div>}
 
-      <div className={isTree ? 'flow-surface mindmap-surface' : 'flow-surface formal-surface'}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          fitView
-          fitViewOptions={{ padding: isTree ? 0.12 : 0.025, includeHiddenNodes: false }}
-          minZoom={isTree ? 0.05 : 0.14}
-          maxZoom={1.6}
-          nodesDraggable={editMode}
-          elementsSelectable={editMode}
-          panOnDrag={!editMode}
-          selectionOnDrag={editMode}
-          onInit={setFlowInstance}
-          onNodesChange={onNodesChange}
-          onNodeDragStop={saveNodePosition}
-          onNodeClick={(_, node) => {
-            if (isReportMode) {
+      <div className={selectedGraphNode ? 'map-canvas-shell has-inspector' : 'map-canvas-shell'}>
+        <div className={isTree ? 'flow-surface mindmap-surface' : 'flow-surface formal-surface'}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            fitView
+            fitViewOptions={{ padding: isTree ? 0.12 : 0.045, includeHiddenNodes: false }}
+            minZoom={isTree ? 0.06 : 0.18}
+            maxZoom={1.6}
+            nodesDraggable={editMode}
+            elementsSelectable={editMode}
+            panOnDrag={!editMode}
+            selectionOnDrag={editMode}
+            onInit={setFlowInstance}
+            onNodesChange={onNodesChange}
+            onNodeDragStop={saveNodePosition}
+            onPaneClick={() => setSelectedNodeId('')}
+            onNodeClick={(_, node) => {
               setSelectedNodeId(node.id);
-              return;
-            }
-            const graphNode = graph.nodes.find((item) => item.id === node.id);
-            if (graphNode && !editMode) setFilters({ ...filters, focusPersonName: graphNode.label });
-          }}
-        >
-          {businessMode === 'recruiting' && <MiniMap pannable zoomable />}
-          <Controls />
-        </ReactFlow>
-      </div>
+              const graphNode = graph.nodes.find((item) => item.id === node.id);
+              if (graphNode && businessMode === 'recruiting' && !editMode) {
+                setFilters({ ...filters, focusPersonName: graphNode.label });
+              }
+            }}
+          >
+            {businessMode === 'recruiting' && <MiniMap pannable zoomable />}
+            <Controls />
+          </ReactFlow>
+        </div>
 
-      {isReportMode && selectedGraphNode && (
-        <section className="tool-panel node-detail-panel">
-          <div className="section-heading">
-            <h2>{selectedDepartment}</h2>
-            <button type="button" className="icon-button" onClick={() => setSelectedNodeId('')} aria-label="关闭备注">
-              <X size={16} />
-            </button>
-          </div>
-          <div className="node-detail-grid">
-            <span>
-              <strong>一号位</strong>
-              {selectedGraphNode.label}
-            </span>
-            <span>
-              <strong>下属人数</strong>
-              {Math.max(selectedGraphNode.descendantCount, selectedGraphNode.span, selectedGraphNode.visibleSpan)}
-            </span>
-            <span>
-              <strong>层级</strong>
-              L{selectedGraphNode.depth}
-            </span>
-          </div>
-          <div className="node-remarks">
-            {(selectedRemarks.length > 0 ? selectedRemarks : ['暂无备注']).map((remark, index) => (
-              <p key={`${remark}-${index}`}>{remark}</p>
-            ))}
-          </div>
-        </section>
-      )}
+        {selectedGraphNode && (
+          <aside className="org-inspector">
+            <div className="org-inspector-head">
+              <div>
+                <span>{selectedDepartment}</span>
+                <h2>{selectedGraphNode.label}</h2>
+                <p>{selectedGraphNode.title ?? '岗位待确认'}</p>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setSelectedNodeId('')} aria-label="关闭详情">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="org-inspector-grid">
+              <span>
+                <strong>层级</strong>
+                L{selectedGraphNode.depth}
+              </span>
+              <span>
+                <strong>团队规模</strong>
+                {Math.max(selectedGraphNode.descendantCount, selectedGraphNode.span, selectedGraphNode.visibleSpan)}
+              </span>
+              <span>
+                <strong>直属</strong>
+                {selectedGraphNode.visibleSpan}
+              </span>
+              <span>
+                <strong>上级</strong>
+                {selectedManager ?? '顶层负责人'}
+              </span>
+              <span>
+                <strong>证据</strong>
+                {selectedPersonRecord?.evidenceIds.length ?? selectedGraphNode.evidenceCount}
+              </span>
+              <span>
+                <strong>更新</strong>
+                {formatDate(selectedGraphNode.updatedAt)}
+              </span>
+            </div>
+
+            {selectedDirectReports.length > 0 && (
+              <div className="org-inspector-section">
+                <h3>直属团队</h3>
+                <div className="org-chip-grid">
+                  {selectedDirectReports.map((name) => (
+                    <span key={name}>{name}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="org-inspector-section">
+              <h3>备注与变更</h3>
+              <div className="node-remarks">
+                {(selectedRemarks.length > 0 ? selectedRemarks : ['暂无备注']).map((remark, index) => (
+                  <p key={`${remark}-${index}`}>{remark}</p>
+                ))}
+              </div>
+            </div>
+          </aside>
+        )}
+      </div>
         </>
       )}
     </section>

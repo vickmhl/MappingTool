@@ -4,7 +4,7 @@ import { calculateOrgInsights } from './insights';
 import { buildOrgGraph } from './graph';
 
 describe('org graph performance', () => {
-  it('keeps formal org chart rendering bounded at 5,000+ people scale', () => {
+  it('keeps formal org chart rendering bounded and report-ready at 5,000+ people scale', () => {
     const state = createMapBusinessDemoState();
     state.project.settings.orgChartMode = 'formal';
 
@@ -26,7 +26,7 @@ describe('org graph performance', () => {
     expect(state.people.length).toBeGreaterThan(5000);
     expect(graph.nodes.length).toBeLessThanOrEqual(300);
     expect(graph.lanes.length).toBeGreaterThan(5);
-    expect(graph.diagnostics.hiddenDirectReports).toBeGreaterThan(1000);
+    expect(graph.diagnostics.hiddenDirectReports).toBeGreaterThan(50);
     expect(metrics.peopleCount).toBe(state.people.length);
     expect(graphDuration).toBeLessThan(1000);
     expect(insightDuration).toBeLessThan(1500);

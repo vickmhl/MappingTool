@@ -185,14 +185,20 @@ export function exportOrgGraphPng(
     throw new Error('浏览器不支持 Canvas 导出。');
   }
 
-  context.fillStyle = '#f4f7fb';
+  context.fillStyle = '#f6f7f9';
   context.fillRect(0, 0, width, height);
-  context.fillStyle = '#0f172a';
-  context.fillRect(0, 0, width, headerHeight);
   context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, headerHeight);
+  context.strokeStyle = '#dbe4ef';
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(0, headerHeight - 0.5);
+  context.lineTo(width, headerHeight - 0.5);
+  context.stroke();
+  context.fillStyle = '#172033';
   context.font = fixedSize ? '700 30px Microsoft YaHei, sans-serif' : '700 26px Microsoft YaHei, sans-serif';
   context.fillText(state.project.name, 38, 46);
-  context.fillStyle = '#cbd5e1';
+  context.fillStyle = '#5f6b7a';
   context.font = '15px Microsoft YaHei, sans-serif';
   context.fillText(
     `${modeText} · ${styleText} · ${graph.nodes.length} 个节点 · ${graph.edges.length} 条关系 · ${exportFormatLabel(format)}`,
@@ -211,14 +217,19 @@ export function exportOrgGraphPng(
     const pillWidth = Math.max(44, context.measureText(label).width + 18);
     context.restore();
     metricX -= pillWidth;
-    drawCanvasPill(context, metricX, 34, label, { fill: 'rgba(255,255,255,0.1)', color: '#ffffff', font: '600 12px Microsoft YaHei, sans-serif' });
+    drawCanvasPill(context, metricX, 34, label, { fill: '#eef4ff', color: '#1e3a8a', font: '600 12px Microsoft YaHei, sans-serif' });
     metricX -= 10;
   }
 
+  context.save();
+  context.shadowColor = 'rgba(15, 23, 42, 0.08)';
+  context.shadowBlur = 28;
+  context.shadowOffsetY = 10;
   context.fillStyle = '#ffffff';
   context.beginPath();
   context.roundRect(boardX, boardY, boardWidth, boardHeight, 20);
   context.fill();
+  context.restore();
   context.strokeStyle = '#d9e3f0';
   context.lineWidth = 1;
   context.stroke();
@@ -227,22 +238,11 @@ export function exportOrgGraphPng(
   context.beginPath();
   context.roundRect(boardX, boardY, boardWidth, boardHeight, 20);
   context.clip();
-  context.fillStyle = '#f8fbff';
+  const chartFill = context.createLinearGradient(boardX, boardY, boardX, boardY + boardHeight);
+  chartFill.addColorStop(0, '#ffffff');
+  chartFill.addColorStop(1, '#fbfcfe');
+  context.fillStyle = chartFill;
   context.fillRect(boardX, boardY, boardWidth, boardHeight);
-  context.strokeStyle = '#edf2f7';
-  context.lineWidth = 1;
-  for (let x = boardX; x < boardX + boardWidth; x += 36) {
-    context.beginPath();
-    context.moveTo(x, boardY);
-    context.lineTo(x, boardY + boardHeight);
-    context.stroke();
-  }
-  for (let y = boardY; y < boardY + boardHeight; y += 36) {
-    context.beginPath();
-    context.moveTo(boardX, y);
-    context.lineTo(boardX + boardWidth, y);
-    context.stroke();
-  }
   context.restore();
 
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
@@ -254,14 +254,14 @@ export function exportOrgGraphPng(
   context.lineCap = 'round';
 
   for (const lane of graph.lanes) {
-    context.fillStyle = '#eef5ff';
-    context.strokeStyle = '#cfe0ff';
+    context.fillStyle = '#f4f8fd';
+    context.strokeStyle = '#dbe5f1';
     context.lineWidth = 1.2;
     context.beginPath();
     context.roundRect(lane.x, lane.y, lane.width, lane.height, 16);
     context.fill();
     context.stroke();
-    context.fillStyle = '#1d4ed8';
+    context.fillStyle = '#1e3a8a';
     context.font = '700 15px Microsoft YaHei, sans-serif';
     context.fillText((shouldMaskCompanies(state) ? '业务单元已脱敏' : lane.label).slice(0, 24), lane.x + 16, lane.y + 24);
     context.fillStyle = '#646a73';
@@ -274,8 +274,8 @@ export function exportOrgGraphPng(
     const target = nodeById.get(edge.target);
     if (!source || !target) continue;
 
-    context.strokeStyle = edge.confidence < 0.72 ? '#d54941' : isMindMap ? '#475569' : '#1677ff';
-    context.lineWidth = isMindMap ? 1.55 : 2.3;
+    context.strokeStyle = edge.confidence < 0.72 ? '#d92d20' : isMindMap ? '#7d8da1' : '#8da2bf';
+    context.lineWidth = isMindMap ? 1.45 : 1.85;
     if (edge.confidence < 0.75 || edge.relationType === 'dotted-line') context.setLineDash([8, 6]);
     else context.setLineDash([]);
     context.beginPath();
@@ -306,9 +306,9 @@ export function exportOrgGraphPng(
   context.setLineDash([]);
 
   for (const node of graph.nodes) {
-    const accent = node.status === 'left' ? '#d54941' : node.depth === 0 ? '#1247b2' : node.changeCount > 0 ? '#d99000' : isReport ? '#0b5cff' : node.isTalent ? '#00a870' : '#7c8da6';
+    const accent = node.status === 'left' ? '#d92d20' : node.depth === 0 ? '#1e3a8a' : node.changeCount > 0 ? '#b76e00' : isReport ? '#2563eb' : node.isTalent ? '#0f8a5f' : '#7d8da1';
     context.fillStyle = node.status === 'left' ? '#fff1f0' : node.changeCount > 0 ? '#fffaf0' : '#ffffff';
-    context.strokeStyle = node.isFocus ? '#0b5cff' : node.status === 'left' ? '#d54941' : node.changeCount > 0 ? '#efd99a' : '#c7d6e8';
+    context.strokeStyle = node.isFocus ? '#2563eb' : node.status === 'left' ? '#d92d20' : node.changeCount > 0 ? '#efd99a' : '#d7e1ef';
     context.lineWidth = node.isFocus ? 2.2 : 1.45;
     context.beginPath();
     context.roundRect(node.x, node.y, nodeWidth, nodeHeight, isMindMap && node.depth >= 2 ? 2 : 10);
@@ -332,8 +332,8 @@ export function exportOrgGraphPng(
       context.fillText(`一号位 ${displayName}`.slice(0, isMindMap ? 18 : 20), node.x + 12, node.y + (isMindMap ? 62 : 70));
       let pillX = node.x + 12;
       pillX += drawCanvasPill(context, pillX, node.y + nodeHeight - 28, `团队 ${Math.max(node.descendantCount, node.span, node.visibleSpan)}`, {
-        fill: '#edf4ff',
-        color: '#0b5cff',
+        fill: '#eef4ff',
+        color: '#1e3a8a',
       }) + 6;
       pillX += drawCanvasPill(context, pillX, node.y + nodeHeight - 28, `直属 ${node.visibleSpan}`, {
         fill: '#f3f6fa',
@@ -766,39 +766,11 @@ export async function exportReportPptx(
     slide.addShape(pptx.ShapeType.line, { x, y, w, h, line: { color: 'B8C7DA', pt: 1 } });
   };
 
-  const cover = pptx.addSlide();
-  addHeader(cover, 'COMPETITOR ORG MAPPING', state.project.name, maskKnownPeopleText(state, narrative.headline));
-  addMetric(cover, 0.62, 1.55, 2.25, shouldMaskCompanies(state) ? '公司已脱敏' : '覆盖公司', shouldMaskCompanies(state) ? '已脱敏' : `${state.project.companies.length} 家`);
-  addMetric(cover, 3.08, 1.55, 2.25, '人员样本', `${state.people.length} 人`, deck.green);
-  addMetric(cover, 5.54, 1.55, 2.25, '当前汇报线', `${narrative.metrics.reportingLineCount} 条`);
-  addMetric(cover, 8.0, 1.55, 2.25, '汇报准备度', `${narrative.metrics.readinessScore} 分`, narrative.metrics.readinessScore >= 82 ? deck.green : deck.amber);
-  addMetric(cover, 10.46, 1.55, 2.25, '待确认', `${pendingCount} 条`, pendingCount > 0 ? deck.red : deck.green);
-  cover.addText('', { x: 0.62, y: 2.45, w: 7.35, h: 3.82, fill: { color: deck.panel }, line: { color: deck.line, pt: 0.8 }, margin: 0 });
-  addBulletPanel(cover, 0.9, 2.78, 6.75, 1.38, '管理层先看三件事', narrative.summaryBullets.slice(0, 3));
-  cover.addShape(pptx.ShapeType.line, { x: 0.9, y: 4.4, w: 6.65, h: 0, line: { color: deck.line, pt: 0.6 } });
-  addBulletPanel(cover, 0.9, 4.68, 6.75, 1.12, '建议动作', narrative.nextActions.slice(0, 2));
-  cover.addText('', { x: 8.28, y: 2.45, w: 4.28, h: 3.82, fill: { color: deck.blueSoft }, line: { color: 'CFE0FF', pt: 0.8 }, margin: 0 });
-  cover.addText('本页结论', { x: 8.58, y: 2.78, w: 1.4, h: 0.28, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
-  cover.addText(clipText(maskKnownPeopleText(state, narrative.nextActions[0] ?? narrative.headline), 78), {
-    x: 8.58,
-    y: 3.2,
-    w: 3.55,
-    h: 1.05,
-    fontSize: 13,
-    bold: true,
-    color: deck.ink,
-    fit: 'shrink',
-    margin: 0,
-  });
-  cover.addText(
-    `适用场景：向上汇报组织判断、同步高招 mapping 方向、标记需要复核的关键岗位。`,
-    { x: 8.58, y: 4.58, w: 3.45, h: 0.8, fontSize: 8.5, color: deck.muted, fit: 'shrink', margin: 0 },
-  );
-  addFooter(cover, 1);
+  let pageNumber = 1;
 
-  const orgSlide = pptx.addSlide();
-  addHeader(orgSlide, 'CANVAS EXPORT', '当前画布主图', `按 ${activeCanvasLabel} 导出，保留当前筛选条件与手动布局。`);
-  orgSlide.addText('', {
+  const mainSlide = pptx.addSlide();
+  addHeader(mainSlide, 'CANVAS EXPORT', state.project.name, `按 ${activeCanvasLabel} 导出，保留当前筛选条件与手动布局。`);
+  mainSlide.addText('', {
     x: 0.62,
     y: 1.48,
     w: 8.68,
@@ -808,9 +780,9 @@ export async function exportReportPptx(
     margin: 0,
   });
   if (exportGraph.nodes.length > 0) {
-    orgSlide.addImage({ data: chartPreviewWide, x: 0.78, y: 1.66, w: 8.36, h: 5.0 });
+    mainSlide.addImage({ data: chartPreviewWide, x: 0.78, y: 1.66, w: 8.36, h: 5.0 });
   } else {
-    orgSlide.addText('暂无可导出的组织图，请先确认候选关系。', {
+    mainSlide.addText('暂无可导出的组织图，请先确认候选关系。', {
       x: 1.0,
       y: 3.75,
       w: 7.6,
@@ -821,7 +793,7 @@ export async function exportReportPptx(
       align: 'center',
     });
   }
-  orgSlide.addText('', {
+  mainSlide.addText('', {
     x: 9.58,
     y: 1.48,
     w: 3.02,
@@ -830,8 +802,8 @@ export async function exportReportPptx(
     line: { color: deck.line, pt: 0.75 },
     margin: 0,
   });
-  orgSlide.addText('导出摘要', { x: 9.84, y: 1.72, w: 1.6, h: 0.24, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
-  orgSlide.addText(
+  mainSlide.addText('导出摘要', { x: 9.84, y: 1.72, w: 1.6, h: 0.24, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
+  mainSlide.addText(
     [
       `视图：${activeCanvasLabel}`,
       `节点：${exportGraph.nodes.length}`,
@@ -852,7 +824,7 @@ export async function exportReportPptx(
     },
   );
   addBulletPanel(
-    orgSlide,
+    mainSlide,
     9.84,
     3.8,
     2.44,
@@ -860,7 +832,37 @@ export async function exportReportPptx(
     '关键备注',
     chartHighlights.length > 0 ? chartHighlights : ['当前画布未发现需要额外说明的结构异常。'],
   );
-  addFooter(orgSlide, 2);
+  addFooter(mainSlide, pageNumber++);
+
+  const overviewSlide = pptx.addSlide();
+  addHeader(overviewSlide, 'COMPETITOR ORG MAPPING', '组织判断总览', maskKnownPeopleText(state, narrative.headline));
+  addMetric(overviewSlide, 0.62, 1.55, 2.25, shouldMaskCompanies(state) ? '公司已脱敏' : '覆盖公司', shouldMaskCompanies(state) ? '已脱敏' : `${state.project.companies.length} 家`);
+  addMetric(overviewSlide, 3.08, 1.55, 2.25, '人员样本', `${state.people.length} 人`, deck.green);
+  addMetric(overviewSlide, 5.54, 1.55, 2.25, '当前汇报线', `${narrative.metrics.reportingLineCount} 条`);
+  addMetric(overviewSlide, 8.0, 1.55, 2.25, '汇报准备度', `${narrative.metrics.readinessScore} 分`, narrative.metrics.readinessScore >= 82 ? deck.green : deck.amber);
+  addMetric(overviewSlide, 10.46, 1.55, 2.25, '待确认', `${pendingCount} 条`, pendingCount > 0 ? deck.red : deck.green);
+  overviewSlide.addText('', { x: 0.62, y: 2.45, w: 7.35, h: 3.82, fill: { color: deck.panel }, line: { color: deck.line, pt: 0.8 }, margin: 0 });
+  addBulletPanel(overviewSlide, 0.9, 2.78, 6.75, 1.38, '管理层先看三件事', narrative.summaryBullets.slice(0, 3));
+  overviewSlide.addShape(pptx.ShapeType.line, { x: 0.9, y: 4.4, w: 6.65, h: 0, line: { color: deck.line, pt: 0.6 } });
+  addBulletPanel(overviewSlide, 0.9, 4.68, 6.75, 1.12, '建议动作', narrative.nextActions.slice(0, 2));
+  overviewSlide.addText('', { x: 8.28, y: 2.45, w: 4.28, h: 3.82, fill: { color: deck.blueSoft }, line: { color: 'CFE0FF', pt: 0.8 }, margin: 0 });
+  overviewSlide.addText('本页结论', { x: 8.58, y: 2.78, w: 1.4, h: 0.28, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
+  overviewSlide.addText(clipText(maskKnownPeopleText(state, narrative.nextActions[0] ?? narrative.headline), 78), {
+    x: 8.58,
+    y: 3.2,
+    w: 3.55,
+    h: 1.05,
+    fontSize: 13,
+    bold: true,
+    color: deck.ink,
+    fit: 'shrink',
+    margin: 0,
+  });
+  overviewSlide.addText(
+    `适用场景：向上汇报组织判断、同步高招 mapping 方向、标记需要复核的关键岗位。`,
+    { x: 8.58, y: 4.58, w: 3.45, h: 0.8, fontSize: 8.5, color: deck.muted, fit: 'shrink', margin: 0 },
+  );
+  addFooter(overviewSlide, pageNumber++);
 
   const layerSlide = pptx.addSlide();
   addHeader(layerSlide, 'ORG DETAIL', '关键团队二级拆解', '优先展开管理跨度大、近期变动多或高招价值高的团队。');
@@ -880,7 +882,7 @@ export async function exportReportPptx(
       color: deck.ink,
     });
   }
-  addFooter(layerSlide, 3);
+  addFooter(layerSlide, pageNumber++);
 
   const businessSlide = pptx.addSlide();
   addHeader(businessSlide, 'BUSINESS VIEW', '业务单元画像与组织信号', '把组织图转换成 HRBP 能判断的业务与人才问题。');
@@ -926,7 +928,7 @@ export async function exportReportPptx(
     narrative.businessSignals.slice(0, 3).map((signal) => `• ${signal.title}：${state.project.settings.exportPrivacy?.notes ? '说明已脱敏' : clipText(maskKnownPeopleText(state, signal.interpretation), 48)}`).join('\n'),
     { x: 7.0, y: 5.02, w: 5.4, h: 1.05, fontSize: 9, color: '334155', fit: 'shrink', margin: 0 },
   );
-  addFooter(businessSlide, 4);
+  addFooter(businessSlide, pageNumber++);
 
   const recruitingSlide = pptx.addSlide();
   addHeader(recruitingSlide, 'RECRUITING MODE', '高招 mapping 作战页', '把组织结构转换成可跟进的人、团队入口和复核动作。');
@@ -976,7 +978,7 @@ export async function exportReportPptx(
     '下一步',
     narrative.nextActions.slice(0, 3),
   );
-  addFooter(recruitingSlide, 5);
+  addFooter(recruitingSlide, pageNumber++);
 
   const riskSlide = pptx.addSlide();
   addHeader(riskSlide, 'RISK & METHOD', '风险、证据与汇报口径', '明确哪些结论可以汇报，哪些需要人工复核。');
@@ -1024,10 +1026,6 @@ export async function exportReportPptx(
     ].join('\n'),
     { x: 7.35, y: 4.72, w: 5.0, h: 1.15, fontSize: 8.3, color: '334155', fit: 'shrink', margin: 0 },
   );
-  addFooter(riskSlide, 6);
-
-  const peopleSlide = pptx.addSlide();
-  addHeader(peopleSlide, 'APPENDIX', '关键人员清单', '保留可编辑表格，便于 HRBP 二次筛选。');
   const peopleRows = state.people.slice(0, 10).map((person) => [
     displayPerson(person, anonymize),
     displayCompany(state, person.company),
@@ -1035,22 +1033,8 @@ export async function exportReportPptx(
     person.currentTitle ?? '待确认',
     person.tags.slice(0, 2).join('、') || (person.status === 'left' ? '已离开' : '在职/待确认'),
   ]);
-  peopleSlide.addTable([['姓名', '公司', '部门', '岗位', '标签/状态'], ...peopleRows] as any, {
-    x: 0.62,
-    y: 1.48,
-    w: 12.0,
-    h: 5.1,
-    border: { type: 'solid', color: deck.line, pt: 0.55 },
-    fontFace: 'Microsoft YaHei',
-    fontSize: 8.2,
-    color: deck.ink,
-    fill: { color: deck.panel },
-    margin: 0.05,
-  });
-  addFooter(peopleSlide, 7);
+  addFooter(riskSlide, pageNumber++);
 
-  const changesSlide = pptx.addSlide();
-  addHeader(changesSlide, 'APPENDIX', '近期变更与风险记录', '用于解释组织变化、离职、调岗和信息冲突。');
   const changeRows = state.changeEvents.slice(0, 10).map((event) => [
     event.date ?? event.createdAt.slice(0, 10),
     anonymize && event.personName ? maskName(event.personName) : event.personName ?? '-',
@@ -1058,19 +1042,41 @@ export async function exportReportPptx(
     state.project.settings.exportPrivacy?.notes ? '说明已脱敏' : clipText(event.description, 42),
     state.project.settings.exportPrivacy?.sources ? '来源已脱敏' : clipText(event.sourceName ?? '-', 22),
   ]);
-  changesSlide.addTable([['日期', '人员', '类型', '说明', '来源'], ...changeRows] as any, {
-    x: 0.62,
-    y: 1.48,
-    w: 12.0,
-    h: 5.1,
-    border: { type: 'solid', color: deck.line, pt: 0.55 },
-    fontFace: 'Microsoft YaHei',
-    fontSize: 8,
-    color: deck.ink,
-    fill: { color: deck.panel },
-    margin: 0.05,
-  });
-  addFooter(changesSlide, 8);
+  if (peopleRows.length > 0) {
+    const peopleSlide = pptx.addSlide();
+    addHeader(peopleSlide, 'APPENDIX', '关键人员清单', '保留可编辑表格，便于 HRBP 二次筛选。');
+    peopleSlide.addTable([['姓名', '公司', '部门', '岗位', '标签/状态'], ...peopleRows] as any, {
+      x: 0.62,
+      y: 1.48,
+      w: 12.0,
+      h: 5.1,
+      border: { type: 'solid', color: deck.line, pt: 0.55 },
+      fontFace: 'Microsoft YaHei',
+      fontSize: 8.2,
+      color: deck.ink,
+      fill: { color: deck.panel },
+      margin: 0.05,
+    });
+    addFooter(peopleSlide, pageNumber++);
+  }
+
+  if (changeRows.length > 0) {
+    const changesSlide = pptx.addSlide();
+    addHeader(changesSlide, 'APPENDIX', '近期变更与风险记录', '用于解释组织变化、离职、调岗和信息冲突。');
+    changesSlide.addTable([['日期', '人员', '类型', '说明', '来源'], ...changeRows] as any, {
+      x: 0.62,
+      y: 1.48,
+      w: 12.0,
+      h: 5.1,
+      border: { type: 'solid', color: deck.line, pt: 0.55 },
+      fontFace: 'Microsoft YaHei',
+      fontSize: 8,
+      color: deck.ink,
+      fill: { color: deck.panel },
+      margin: 0.05,
+    });
+    addFooter(changesSlide, pageNumber++);
+  }
 
   await pptx.writeFile({ fileName });
 }

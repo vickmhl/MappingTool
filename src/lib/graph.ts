@@ -6,10 +6,10 @@ export type CanvasViewKey = 'executive' | 'recruiting' | 'detail' | 'mindmap';
 
 const EXPLORE_CARD_WIDTH = 210;
 const EXPLORE_CARD_HEIGHT = 98;
-const FORMAL_CARD_WIDTH = 246;
-const FORMAL_CARD_HEIGHT = 112;
-const FORMAL_X_GAP = 70;
-const FORMAL_Y_GAP = 150;
+const FORMAL_CARD_WIDTH = 250;
+const FORMAL_CARD_HEIGHT = 116;
+const FORMAL_X_GAP = 84;
+const FORMAL_Y_GAP = 168;
 
 export interface OrgGraphNode {
   id: string;
@@ -146,6 +146,64 @@ function sortNamesByPerson(names: string[], peopleByName: Map<string, Person>, d
   });
 }
 
+function averageConfidenceFor(name: string, confidenceByName: Map<string, number[]>): number {
+  const values = confidenceByName.get(name) ?? [];
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function buildReportVisibleNames(
+  people: Person[],
+  peopleByName: Map<string, Person>,
+  childrenByManager: Map<string, string[]>,
+  depthByName: Map<string, number>,
+  directSpanAll: Map<string, number>,
+  confidenceByName: Map<string, number[]>,
+  limit: number,
+): Set<string> {
+  const orderedNames = sortNamesByPerson(
+    people.map((person) => normalizeName(person.name)),
+    peopleByName,
+    depthByName,
+  );
+  const visibleNames = new Set<string>();
+  const levelTwoManagers: string[] = [];
+
+  for (const name of orderedNames) {
+    const depth = depthByName.get(name) ?? 0;
+    if (depth <= 2 && visibleNames.size < limit) visibleNames.add(name);
+    if (depth === 2) levelTwoManagers.push(name);
+  }
+
+  if (visibleNames.size >= limit) return visibleNames;
+
+  const expandableManagers = levelTwoManagers.slice().sort((a, b) => {
+    const spanDelta = (directSpanAll.get(a) ?? 0) - (directSpanAll.get(b) ?? 0);
+    if (spanDelta !== 0) return spanDelta;
+    return (peopleByName.get(a)?.currentDepartment ?? '').localeCompare(
+      peopleByName.get(b)?.currentDepartment ?? '',
+      'zh-Hans-CN',
+    );
+  });
+
+  for (const manager of expandableManagers) {
+    const directCount = directSpanAll.get(manager) ?? 0;
+    if (directCount === 0 || directCount > 5) continue;
+    const averageConfidence = averageConfidenceFor(manager, confidenceByName);
+    if (averageConfidence > 0 && averageConfidence < 0.75) continue;
+
+    const candidates = sortNamesByPerson(
+      (childrenByManager.get(manager) ?? []).filter((child) => (depthByName.get(child) ?? 0) === 3),
+      peopleByName,
+      depthByName,
+    );
+    if (candidates.length === 0 || visibleNames.size + candidates.length > limit) continue;
+    for (const child of candidates) visibleNames.add(child);
+  }
+
+  return visibleNames;
+}
+
 function collectDescendants(name: string, childrenByManager: Map<string, string[]>): Set<string> {
   const descendants = new Set<string>();
   const queue = [name];
@@ -190,7 +248,9 @@ export function getOrgMapLayout(state: AppState): CanvasLayout | undefined {
 
 export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = getOrgMapLayout(state)): OrgGraph {
   const mode = currentMode(state);
-  const isMindMap = state.project.settings.activeCanvasView === 'mindmap' || state.project.settings.activeCanvasView === 'detail';
+  const activeCanvasView = state.project.settings.activeCanvasView;
+  const isMindMap = activeCanvasView === 'mindmap' || activeCanvasView === 'detail';
+  const isReportView = activeCanvasView === 'executive' || activeCanvasView === 'mindmap';
   const candidatePeople = state.people.filter((person) => !filters.company || person.company === filters.company);
   const peopleByName = new Map(candidatePeople.map((person) => [normalizeName(person.name), person]));
   const allCandidateNames = new Set(peopleByName.keys());
@@ -244,23 +304,40 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
   const focusSet = new Set<string>([...focusAncestors, ...focusDescendants, ...focusSiblings]);
   if (focusName) focusSet.add(focusName);
 
-  const basePeople = candidatePeople.filter((person) => {
-    const name = normalizeName(person.name);
-    if (focusName && !focusSet.has(name)) return false;
-    if (!focusName && !personMatches(person, filters)) return false;
-    return true;
-  });
+  const useReportDefault = isReportView && !focusName && !filters.search.trim();
+  const reportVisibleNames = useReportDefault
+    ? buildReportVisibleNames(
+        candidatePeople,
+        peopleByName,
+        childrenByManager,
+        depthByName,
+        directSpanAll,
+        confidenceByName,
+        Math.min(filters.visibleLimit, 28),
+      )
+    : undefined;
+
+  const basePeople = useReportDefault
+    ? candidatePeople.filter((person) => reportVisibleNames?.has(normalizeName(person.name)))
+    : candidatePeople.filter((person) => {
+        const name = normalizeName(person.name);
+        if (focusName && !focusSet.has(name)) return false;
+        if (!focusName && !personMatches(person, filters)) return false;
+        return true;
+      });
   const focusDepth = focusName ? depthByName.get(focusName) ?? 0 : 0;
-  const depthLimitedPeople = basePeople.filter((person) => {
-    const name = normalizeName(person.name);
-    const depth = depthByName.get(name) ?? 0;
-    if (focusName) {
-      if (focusAncestors.includes(name) || focusSiblings.has(name)) return true;
-      return depth - focusDepth <= filters.maxDepth;
-    }
-    if (filters.search.trim()) return true;
-    return depth <= filters.maxDepth;
-  });
+  const depthLimitedPeople = useReportDefault
+    ? basePeople
+    : basePeople.filter((person) => {
+        const name = normalizeName(person.name);
+        const depth = depthByName.get(name) ?? 0;
+        if (focusName) {
+          if (focusAncestors.includes(name) || focusSiblings.has(name)) return true;
+          return depth - focusDepth <= filters.maxDepth;
+        }
+        if (filters.search.trim()) return true;
+        return depth <= filters.maxDepth;
+      });
 
   const orderedPeople = depthLimitedPeople
     .slice()
@@ -518,11 +595,11 @@ function buildMindMapPositions(
   const positions = new Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }>();
   if (!root) return positions;
 
-  const rootX = 560;
-  const rootY = 310;
-  const primaryGapX = 238;
-  const depthGapX = 152;
-  const rowGap = 92;
+  const rootX = 520;
+  const rootY = 320;
+  const primaryGapX = 250;
+  const depthGapX = 156;
+  const rowGap = 84;
   positions.set(root, { x: rootX, y: rootY, side: 'root' });
 
   const visibleChildrenOf = (name: string): string[] =>
