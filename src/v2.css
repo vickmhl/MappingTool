@@ -254,6 +254,16 @@
   color: #ffffff;
 }
 
+.flow-node.business-report.report-depth-0 .report-node-metrics b,
+.flow-node.business-report.report-depth-0 .report-node-metrics i {
+  background: rgb(255 255 255 / 16%);
+  border: 1px solid rgb(255 255 255 / 20%);
+}
+
+.flow-node.business-report.report-depth-0 .report-node-metrics i {
+  color: #e7efff;
+}
+
 .flow-node.business-report.report-depth-1 {
   border-top-color: #0b5cff;
 }
@@ -400,9 +410,9 @@
 }
 
 .flow-node.business-report.report-depth-0 .node-note-button {
-  color: #123f8c;
-  background: #ffffff;
-  border-color: #ffffff;
+  color: #ffffff;
+  background: rgb(255 255 255 / 16%);
+  border-color: rgb(255 255 255 / 24%);
 }
 
 .node-detail-panel {
