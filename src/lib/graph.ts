@@ -139,6 +139,24 @@ function levelLabelForPerson(person: Person, depth: number): string {
   return 'IC\/Specialist';
 }
 
+function hierarchyLabelForPerson(person: Person, depth: number): string {
+  if (depth === 0) return 'L0 Exec';
+  if (depth === 1) return 'L1 BU Lead';
+  if (depth === 2) return 'L2 Dept Lead';
+  if (depth === 3) return 'L3 Team Lead';
+  const text = `${person.currentTitle ?? ''} ${person.tags.join(' ')}`;
+  if (/GM|President|VP|Executive|Core/i.test(text)) return 'L0 Exec';
+  if (/BU|Business Unit|Group Lead/i.test(text)) return 'L1 BU Lead';
+  if (/Director|Department|Head/i.test(text)) return 'L2 Dept Lead';
+  if (/Manager|Lead|Supervisor/i.test(text)) return 'L3 Team Lead';
+  return 'IC\/Specialist';
+}
+
+export function referenceLevelForPerson(person: Person, depth: number): string | undefined {
+  const referenceLevel = levelLabelForPerson(person, depth);
+  return /^P\d{1,2}$/i.test(referenceLevel) ? referenceLevel : undefined;
+}
+
 function topAncestorForName(
   name: string,
   managerBySubordinate: Map<string, string>,
@@ -440,7 +458,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       isTalent: person.tags.includes('关键人才') || person.tags.includes('重点人才'),
       isFocus: Boolean(focusName && name === focusName),
       depth,
-      levelLabel: levelLabelForPerson(person, depth),
+      levelLabel: hierarchyLabelForPerson(person, depth),
       span,
       descendantCount,
       visibleSpan,
