@@ -405,7 +405,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       status: person.status,
       updatedAt: person.updatedAt,
       evidenceCount: person.evidenceIds.length,
-      isTalent: person.tags.includes('鍏抽敭浜烘墠') || person.tags.includes('閲嶇偣浜烘墠'),
+      isTalent: person.tags.includes('关键人才') || person.tags.includes('重点人才'),
       isFocus: Boolean(focusName && name === focusName),
       depth,
       levelLabel: levelLabelForPerson(person, depth),

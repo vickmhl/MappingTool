@@ -10,7 +10,7 @@ describe('seed data', () => {
     expect(state.people.length).toBeGreaterThan(5000);
     expect(state.reportingLines.length).toBeGreaterThan(5000);
     expect(state.orgUnits.length).toBeGreaterThan(150);
-    expect(state.sources[0].warnings?.[0]).toContain('铏氭嫙鏁版嵁');
+    expect(state.sources[0].warnings?.[0]).toContain('虚拟数据');
   });
 
   it('uses view-specific saved canvas positions when building the org graph', () => {
