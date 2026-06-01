@@ -227,41 +227,41 @@
   gap: 8px;
   padding: 14px 16px 12px;
   color: var(--v3-ink);
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   border: 1px solid #d8e1ed;
   border-top: 4px solid var(--v3-primary);
   border-radius: 8px;
-  box-shadow: 0 10px 24px rgb(15 23 42 / 7%);
+  box-shadow: 0 8px 20px rgb(15 23 42 / 6%);
 }
 
 .flow-node.business-report.report-depth-0 {
-  color: #ffffff;
-  background: linear-gradient(180deg, #244ea2 0%, #1e3a8a 100%);
-  border-color: #244ea2;
-  border-top-color: #244ea2;
-  box-shadow: 0 18px 36px rgb(30 58 138 / 16%);
+  color: var(--v3-ink);
+  background: linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%);
+  border-color: #b9d2ff;
+  border-top-color: #1f5eff;
+  box-shadow: 0 14px 28px rgb(37 99 235 / 11%);
 }
 
 .flow-node.business-report.report-depth-0 .flow-node-top small,
 .flow-node.business-report.report-depth-0 span,
 .flow-node.business-report.report-depth-0 .report-node-metrics,
 .flow-node.business-report.report-depth-0 .report-node-metrics i {
-  color: #dceaff;
+  color: #4d6484;
 }
 
 .flow-node.business-report.report-depth-0 strong,
 .flow-node.business-report.report-depth-0 .report-node-metrics b {
-  color: #ffffff;
+  color: #102a56;
 }
 
 .flow-node.business-report.report-depth-0 .report-node-metrics b,
 .flow-node.business-report.report-depth-0 .report-node-metrics i {
-  background: rgb(255 255 255 / 16%);
-  border: 1px solid rgb(255 255 255 / 20%);
+  background: #ffffff;
+  border: 1px solid #cfe0ff;
 }
 
 .flow-node.business-report.report-depth-0 .report-node-metrics i {
-  color: #e7efff;
+  color: #5f7392;
 }
 
 .flow-node.business-report.report-depth-1 {
@@ -299,6 +299,15 @@
   font-style: normal;
 }
 
+.flow-node.business-report .flow-node-top small,
+.flow-node.business-recruiting .flow-node-top small {
+  color: #2f61c9;
+  background: #eef4ff;
+  border: 1px solid #d6e3ff;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
 .report-node-metrics {
   display: flex;
   flex-wrap: wrap;
@@ -319,13 +328,15 @@
 }
 
 .report-node-metrics b {
-  color: var(--v3-primary-deep);
-  background: var(--v3-primary-soft);
+  color: #214a9b;
+  background: #edf4ff;
+  border: 1px solid #d4e2ff;
 }
 
 .report-node-metrics i {
-  color: var(--v3-muted);
-  background: #f4f6f9;
+  color: #5c6f88;
+  background: #f6f8fb;
+  border: 1px solid #e6ebf2;
 }
 
 .flow-node.business-report.selected {
@@ -389,8 +400,10 @@
   width: 198px;
   min-height: 96px;
   padding: 12px 14px 11px;
-  border-top-color: #8ea2bb;
-  box-shadow: 0 8px 18px rgb(15 23 42 / 6%);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border-color: #d8e1ed;
+  border-top-color: #9eb0c3;
+  box-shadow: 0 6px 16px rgb(15 23 42 / 5%);
 }
 
 .flow-node.business-recruiting .flow-node-meta .talent-pill {
@@ -398,21 +411,58 @@
   background: #e7f8f1;
 }
 
+.flow-node.business-recruiting strong {
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.flow-node.business-recruiting span {
+  display: block;
+  color: #26364f;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.flow-node.business-recruiting em {
+  display: block;
+  color: #637287;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.flow-node.business-recruiting .flow-node-meta b {
+  color: #53657d;
+  background: #f5f7fb;
+  border: 1px solid #e4eaf2;
+}
+
 .node-note-button {
   width: fit-content;
   min-height: 26px;
   padding: 0 8px;
-  color: var(--v3-primary-deep);
-  background: var(--v3-primary-soft);
-  border: 1px solid #c7ddff;
+  color: #214a9b;
+  background: #edf4ff;
+  border: 1px solid #d4e2ff;
   border-radius: 999px;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .flow-node.business-report.report-depth-0 .node-note-button {
-  color: #ffffff;
-  background: rgb(255 255 255 / 16%);
-  border-color: rgb(255 255 255 / 24%);
+  color: #214a9b;
+  background: #ffffff;
+  border-color: #cfe0ff;
+}
+
+.react-flow__edge.formal-edge .react-flow__edge-path {
+  stroke: #9fb2c8;
+  stroke-width: 1.55;
+}
+
+.react-flow__edge.mindmap-edge .react-flow__edge-path {
+  stroke: #889cb6;
+  stroke-width: 1.2;
 }
 
 .node-detail-panel {
