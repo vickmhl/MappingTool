@@ -99,7 +99,7 @@ describe('org graph performance', () => {
     const maxX = Math.max(...graph.nodes.map((node) => node.x));
     expect(maxX - minX).toBeLessThan(3400);
     expect(graph.nodes.filter((node) => node.depth === 1).length).toBeGreaterThanOrEqual(8);
-    expect(graph.nodes.find((node) => node.depth === 0)?.levelLabel).toBe('P11');
+    expect(graph.nodes.find((node) => node.depth === 0)?.levelLabel).toBe('L0 Exec');
   });
 
   it('keeps the recruiting regular chart grouped by top-level branches instead of spreading by depth lanes', () => {
