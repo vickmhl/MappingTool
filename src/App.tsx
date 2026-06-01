@@ -95,8 +95,8 @@ const canvasPresets: Record<
 > = {
   executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
   mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
-  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 72, maxDepth: 2 } },
-  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 84, maxDepth: 2 } },
+  recruiting: { template: 'recruiting', chartMode: 'explore', filters: { minConfidence: 0.55, visibleLimit: 36, maxDepth: 1 } },
+  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 60, maxDepth: 2 } },
 };
 
 function canvasViewForMode(mode: OrgBusinessMode, style: OrgChartStyle): CanvasViewKey {
@@ -1059,6 +1059,27 @@ function OrgMapView({
   useEffect(() => {
     if (!flowInstance || nodes.length === 0 || editMode) return;
     const timer = window.setTimeout(() => {
+      const fitPrimaryBounds = (depthLimit: number, padding: number) => {
+        const primaryNodes = graph.nodes.filter((node) => node.depth <= depthLimit);
+        if (primaryNodes.length === 0) {
+          void flowInstance.fitView({ duration: 260, padding, includeHiddenNodes: false });
+          return;
+        }
+        const minX = Math.min(...primaryNodes.map((node) => node.x));
+        const maxX = Math.max(...primaryNodes.map((node) => node.x));
+        const minY = Math.min(...primaryNodes.map((node) => node.y));
+        const maxY = Math.max(...primaryNodes.map((node) => node.y));
+        void flowInstance.fitBounds(
+          {
+            x: minX - 32,
+            y: minY - 32,
+            width: maxX - minX + 250 + 64,
+            height: maxY - minY + 116 + 64,
+          },
+          { duration: 260, padding },
+        );
+      };
+
       if (savedCount > 0) {
         void flowInstance.fitView({ duration: 260, padding: isTree ? 0.12 : 0.08, includeHiddenNodes: false });
         return;
@@ -1070,25 +1091,15 @@ function OrgMapView({
       }
 
       if (isReportMode) {
-        void flowInstance.fitView({ duration: 260, padding: 0.12, includeHiddenNodes: false });
+        fitPrimaryBounds(2, 0.16);
         return;
       }
 
-      const rootGraphNode = graph.nodes.find((node) => node.depth === 0);
-      if (!rootGraphNode) {
-        void flowInstance.fitView({ duration: 260, padding: 0.08, includeHiddenNodes: false });
-        return;
-      }
-
-      const zoom = 0.7;
-      void flowInstance.setCenter(rootGraphNode.x + 120, rootGraphNode.y + (isReportMode ? 210 : 260), {
-        zoom,
-        duration: 260,
-      });
+      fitPrimaryBounds(filters.maxDepth <= 1 ? 1 : 2, 0.14);
     }, 80);
 
     return () => window.clearTimeout(timer);
-  }, [editMode, flowInstance, graph.nodes, isReportMode, isTree, nodes.length, savedCount]);
+  }, [editMode, filters.maxDepth, flowInstance, graph.nodes, isReportMode, isTree, nodes.length, savedCount]);
 
   const onNodesChange = (changes: NodeChange[]) => {
     if (!editMode) return;
