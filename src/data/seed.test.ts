@@ -27,6 +27,13 @@ describe('seed data', () => {
     expect(pTags.has('P6')).toBe(true);
   });
 
+  it('stores ali-style p-sequence as virtual notes instead of primary org labels', () => {
+    const state = createMapBusinessDemoState();
+    const firstVirtual = state.people.find((person) => person.tags.includes('虚拟样例'));
+
+    expect(firstVirtual?.sensitiveNote).toContain('虚拟职级参考：阿里 P');
+  });
+
   it('uses view-specific saved canvas positions when building the org graph', () => {
     const state = createMapBusinessDemoState();
     const targetName = state.people[0]?.name ?? '';
