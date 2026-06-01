@@ -384,6 +384,7 @@ export function createMapBusinessDemoState(): AppState {
 
   const tagAliPLevel = (person: Person, level: string) => {
     if (!person.tags.includes(level)) person.tags.push(level);
+    person.sensitiveNote = `虚拟职级参考：阿里 ${level}（仅用于样例演示，不代表真实公司职级）`;
   };
 
   const addLine = (subordinateName: string, managerName: string, confidence = 0.91) => {
