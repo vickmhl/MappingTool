@@ -96,7 +96,7 @@ const canvasPresets: Record<
   executive: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
   mindmap: { template: 'executive', chartMode: 'formal', filters: { minConfidence: 0.72, visibleLimit: 28, maxDepth: 2 } },
   recruiting: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 48, maxDepth: 2 } },
-  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 60, maxDepth: 2 } },
+  detail: { template: 'recruiting', chartMode: 'formal', filters: { minConfidence: 0.55, visibleLimit: 42, maxDepth: 2 } },
 };
 
 function canvasViewForMode(mode: OrgBusinessMode, style: OrgChartStyle): CanvasViewKey {

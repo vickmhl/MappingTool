@@ -384,7 +384,15 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
 
   const positions: Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> = mode === 'formal'
     ? isMindMap
-      ? buildMindMapPositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
+      ? buildMindMapPositions(
+          limitedPeople,
+          peopleByName,
+          visibleChildrenByManager,
+          managerBySubordinate,
+          depthByName,
+          layout,
+          activeCanvasView === 'detail' ? 'recruiting' : 'report',
+        )
       : isReportView
         ? buildExecutivePositions(limitedPeople, peopleByName, visibleChildrenByManager, managerBySubordinate, depthByName, layout)
         : activeCanvasView === 'recruiting'
@@ -807,6 +815,7 @@ function buildMindMapPositions(
   managerBySubordinate: Map<string, string>,
   depthByName: Map<string, number>,
   layout: CanvasLayout | undefined,
+  profile: 'report' | 'recruiting' = 'report',
 ): Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> {
   const visibleNames = new Set(people.map((person) => normalizeName(person.name)));
   const roots = people
@@ -817,11 +826,11 @@ function buildMindMapPositions(
   const positions = new Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }>();
   if (!root) return positions;
 
-  const rootX = 520;
+  const rootX = profile === 'recruiting' ? 640 : 560;
   const rootY = 320;
-  const primaryGapX = 250;
-  const depthGapX = 156;
-  const rowGap = 84;
+  const primaryGapX = profile === 'recruiting' ? 330 : 290;
+  const depthGapX = profile === 'recruiting' ? 248 : 228;
+  const rowGap = profile === 'recruiting' ? 132 : 116;
   positions.set(root, { x: rootX, y: rootY, side: 'root' });
 
   const visibleChildrenOf = (name: string): string[] =>

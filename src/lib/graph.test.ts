@@ -53,6 +53,34 @@ describe('org graph performance', () => {
     expect(graph.nodes.some((node) => node.mindMapSide === 'right')).toBe(true);
   });
 
+  it('keeps the recruiting tree chart from overlapping adjacent depth columns', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'detail';
+
+    const graph = buildOrgGraph(state, {
+      company: '',
+      search: '',
+      focusPersonName: '',
+      minConfidence: 0.55,
+      visibleLimit: 42,
+      maxDepth: 2,
+    });
+
+    const sideNodes = graph.nodes.filter(
+      (node) => (node.mindMapSide === 'left' || node.mindMapSide === 'right') && node.depth >= 1,
+    );
+    const minHorizontalStep = sideNodes.reduce((minGap, node) => {
+      const parentEdge = graph.edges.find((edge) => edge.target === node.id);
+      if (!parentEdge) return minGap;
+      const parent = graph.nodes.find((candidate) => candidate.id === parentEdge.source);
+      if (!parent) return minGap;
+      return Math.min(minGap, Math.abs(node.x - parent.x));
+    }, Number.POSITIVE_INFINITY);
+
+    expect(minHorizontalStep).toBeGreaterThan(210);
+  });
+
   it('keeps the executive report chart compact enough for first-screen reading', () => {
     const state = createMapBusinessDemoState();
     state.project.settings.orgChartMode = 'formal';
