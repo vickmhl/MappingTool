@@ -121,16 +121,38 @@ function canvasViewLabel(view: CanvasViewKey): string {
   }[view];
 }
 
-const DEMO_LAYOUT_STORAGE_KEY = 'mapping-tool-demo-layouts-v1';
+const DEMO_LAYOUT_STORAGE_KEY = 'mapping-tool-demo-layouts-v2';
+const LEGACY_DEMO_LAYOUT_STORAGE_KEYS = ['mapping-tool-demo-layouts-v1'];
+
+function sanitizeDemoCanvasLayouts(layouts: AppState['canvasLayouts'] | undefined): AppState['canvasLayouts'] | undefined {
+  if (!layouts || typeof layouts !== 'object') return undefined;
+  const allowedLayoutIds = new Set([
+    layoutIdForCanvasView('executive'),
+    layoutIdForCanvasView('mindmap'),
+    layoutIdForCanvasView('recruiting'),
+    layoutIdForCanvasView('detail'),
+  ]);
+  const nextLayouts: AppState['canvasLayouts'] = {};
+
+  for (const [layoutId, layout] of Object.entries(layouts)) {
+    if (!allowedLayoutIds.has(layoutId) || !layout || typeof layout !== 'object' || !layout.nodes) continue;
+    nextLayouts[layoutId] = layout;
+  }
+
+  return Object.keys(nextLayouts).length > 0 ? nextLayouts : undefined;
+}
 
 function loadDemoCanvasLayouts(): AppState['canvasLayouts'] | undefined {
   if (typeof window === 'undefined') return undefined;
   try {
+    for (const legacyKey of LEGACY_DEMO_LAYOUT_STORAGE_KEYS) {
+      window.localStorage.removeItem(legacyKey);
+    }
     const raw = window.localStorage.getItem(DEMO_LAYOUT_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return undefined;
-    return parsed as AppState['canvasLayouts'];
+    return sanitizeDemoCanvasLayouts(parsed as AppState['canvasLayouts']);
   } catch {
     return undefined;
   }
@@ -1033,6 +1055,35 @@ function OrgMapView({
   useEffect(() => {
     if (selectedNodeId && !graph.nodes.some((node) => node.id === selectedNodeId)) setSelectedNodeId('');
   }, [graph.nodes, selectedNodeId]);
+
+  useEffect(() => {
+    if (!flowInstance || nodes.length === 0 || editMode) return;
+    const timer = window.setTimeout(() => {
+      if (savedCount > 0) {
+        void flowInstance.fitView({ duration: 260, padding: isTree ? 0.12 : 0.08, includeHiddenNodes: false });
+        return;
+      }
+
+      if (isTree) {
+        void flowInstance.fitView({ duration: 260, padding: 0.12, includeHiddenNodes: false });
+        return;
+      }
+
+      const rootGraphNode = graph.nodes.find((node) => node.depth === 0);
+      if (!rootGraphNode) {
+        void flowInstance.fitView({ duration: 260, padding: 0.08, includeHiddenNodes: false });
+        return;
+      }
+
+      const zoom = isReportMode ? 0.86 : 0.7;
+      void flowInstance.setCenter(rootGraphNode.x + 120, rootGraphNode.y + (isReportMode ? 210 : 260), {
+        zoom,
+        duration: 260,
+      });
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [editMode, flowInstance, graph.nodes, isReportMode, isTree, nodes.length, savedCount]);
 
   const onNodesChange = (changes: NodeChange[]) => {
     if (!editMode) return;
