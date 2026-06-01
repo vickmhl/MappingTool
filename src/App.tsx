@@ -966,7 +966,7 @@ function OrgMapView({
                   <>
                     <div className="flow-node-top">
                       <strong>{departmentLabel}</strong>
-                      <small>{node.depth === 0 ? '集团' : `L${node.depth}`}</small>
+                      <small>{node.levelLabel}</small>
                     </div>
                     <span>一号位 {node.label}</span>
                     <em>{node.title ?? '负责人待确认'}</em>

@@ -109,7 +109,24 @@ function currentMode(state: AppState): OrgChartMode {
   return state.project.settings.orgChartMode ?? 'formal';
 }
 
+function explicitPLevel(person: Person): string | undefined {
+  return person.tags.find((tag) => /^P\d{1,2}$/i.test(tag));
+}
+
+function virtualAliPLevel(person: Person, depth: number): string {
+  if (depth <= 0) return 'P11';
+  if (depth === 1) return 'P10';
+  if (depth === 2) return 'P9';
+  if (depth === 3) return 'P8';
+  const title = person.currentTitle ?? '';
+  if (/高级|专家|架构|顾问/i.test(title)) return 'P7';
+  return 'P6';
+}
+
 function levelLabelForPerson(person: Person, depth: number): string {
+  const explicitLevel = explicitPLevel(person);
+  if (explicitLevel) return explicitLevel.toUpperCase();
+  if (person.tags.includes('虚拟样例')) return virtualAliPLevel(person, depth);
   if (depth === 0) return 'L0 Exec';
   if (depth === 1) return 'L1 BU Lead';
   if (depth === 2) return 'L2 Dept Lead';

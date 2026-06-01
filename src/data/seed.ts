@@ -382,6 +382,10 @@ export function createMapBusinessDemoState(): AppState {
     return person;
   };
 
+  const tagAliPLevel = (person: Person, level: string) => {
+    if (!person.tags.includes(level)) person.tags.push(level);
+  };
+
   const addLine = (subordinateName: string, managerName: string, confidence = 0.91) => {
     state.reportingLines.push({
       id: createId('line'),
@@ -396,6 +400,8 @@ export function createMapBusinessDemoState(): AppState {
   };
 
   const president = addPerson('林澈', '地图平台事业群总经理', '地图平台事业群', ['高管', '核心目标']);
+  tagAliPLevel(president, 'P11');
+
   const businessUnits = [
     {
       name: '地图数据与采集平台',
@@ -464,22 +470,26 @@ export function createMapBusinessDemoState(): AppState {
   for (const unit of businessUnits) {
     const unitOrg = addOrgUnit(unit.name, unit.fn);
     const unitLead = addPerson(nextName(), unit.leadTitle, unit.name, ['一级负责人']);
+    tagAliPLevel(unitLead, 'P10');
     addLine(unitLead.name, president.name, 0.94);
 
     unit.departments.forEach((departmentName, departmentIndex) => {
       const departmentOrg = addOrgUnit(departmentName, unit.fn, unitOrg.id);
       const departmentLead = addPerson(nextName(), `${departmentName}负责人`, departmentName, ['二级负责人']);
+      tagAliPLevel(departmentLead, 'P9');
       addLine(departmentLead.name, unitLead.name, 0.92);
 
       squadNames.forEach((squadName, squadIndex) => {
         const squadFullName = `${departmentName}${squadName}组`;
         addOrgUnit(squadFullName, unit.fn, departmentOrg.id);
         const squadLead = addPerson(nextName(), `${squadFullName}负责人`, squadFullName, ['三级负责人']);
+        tagAliPLevel(squadLead, 'P8');
         addLine(squadLead.name, departmentLead.name, 0.9);
 
         for (let memberIndex = 0; memberIndex < 41; memberIndex += 1) {
           const role = icRoles[(departmentIndex + squadIndex + memberIndex) % icRoles.length];
           const member = addPerson(nextName(), role, squadFullName, ['关键人才池']);
+          tagAliPLevel(member, memberIndex % 9 === 0 ? 'P8' : memberIndex % 3 === 0 ? 'P7' : 'P6');
           addLine(member.name, squadLead.name, 0.91);
         }
       });

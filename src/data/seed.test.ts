@@ -13,6 +13,20 @@ describe('seed data', () => {
     expect(state.sources[0].warnings?.[0]).toContain('虚拟数据');
   });
 
+  it('assigns ali-style p-sequence tags across the virtual sample', () => {
+    const state = createMapBusinessDemoState();
+    const pTags = new Set(
+      state.people.flatMap((person) => person.tags.filter((tag) => /^P\d{1,2}$/i.test(tag))),
+    );
+
+    expect(pTags.has('P11')).toBe(true);
+    expect(pTags.has('P10')).toBe(true);
+    expect(pTags.has('P9')).toBe(true);
+    expect(pTags.has('P8')).toBe(true);
+    expect(pTags.has('P7')).toBe(true);
+    expect(pTags.has('P6')).toBe(true);
+  });
+
   it('uses view-specific saved canvas positions when building the org graph', () => {
     const state = createMapBusinessDemoState();
     const targetName = state.people[0]?.name ?? '';
