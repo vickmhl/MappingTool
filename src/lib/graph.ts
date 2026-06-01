@@ -105,16 +105,16 @@ function currentMode(state: AppState): OrgChartMode {
 }
 
 function levelLabelForPerson(person: Person, depth: number): string {
-  if (depth === 0) return 'L0 楂樼';
-  if (depth === 1) return 'L1 BU璐熻矗浜?;
-  if (depth === 2) return 'L2 閮ㄩ棬璐熻矗浜?;
-  if (depth === 3) return 'L3 鍥㈤槦璐熻矗浜?;
-  const text = `${person.currentTitle ?? ''}${person.tags.join(' ')}`;
-  if (/鎬荤粡鐞唡鎬昏|鍓€昏|VP|楂樼|鏍稿績鐩爣/i.test(text)) return 'L0 楂樼';
-  if (/涓€绾ц礋璐ｄ汉/i.test(text)) return 'L1 BU璐熻矗浜?;
-  if (/浜岀骇璐熻矗浜簗鎬荤洃|璐熻矗浜簗Head/i.test(text)) return 'L2 閮ㄩ棬璐熻矗浜?;
-  if (/涓夌骇璐熻矗浜簗缁忕悊|涓荤|Lead/i.test(text)) return 'L3 鍥㈤槦璐熻矗浜?;
-  return 'IC/涓撳';
+  if (depth === 0) return 'L0 Exec';
+  if (depth === 1) return 'L1 BU Lead';
+  if (depth === 2) return 'L2 Dept Lead';
+  if (depth === 3) return 'L3 Team Lead';
+  const text = `${person.currentTitle ?? ''} ${person.tags.join(' ')}`;
+  if (/GM|President|VP|Executive|Core/i.test(text)) return 'L0 Exec';
+  if (/BU|Business Unit|Group Lead/i.test(text)) return 'L1 BU Lead';
+  if (/Director|Department|Head/i.test(text)) return 'L2 Dept Lead';
+  if (/Manager|Lead|Supervisor/i.test(text)) return 'L3 Team Lead';
+  return 'IC\/Specialist';
 }
 
 function topAncestorForName(
@@ -405,7 +405,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       status: person.status,
       updatedAt: person.updatedAt,
       evidenceCount: person.evidenceIds.length,
-      isTalent: person.tags.includes('鍏抽敭浜烘墠姹?),
+      isTalent: person.tags.includes('鍏抽敭浜烘墠') || person.tags.includes('閲嶇偣浜烘墠'),
       isFocus: Boolean(focusName && name === focusName),
       depth,
       levelLabel: levelLabelForPerson(person, depth),
@@ -429,7 +429,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     id: line.id,
     source: nodeIdForName(line.managerName),
     target: nodeIdForName(line.subordinateName),
-    label: line.relationType === 'dotted-line' ? '铏氱嚎姹囨姤' : line.relationType === 'manages' ? '绠＄悊' : '姹囨姤',
+    label: line.relationType === 'dotted-line' ? 'Dotted' : line.relationType === 'manages' ? 'Manages' : 'Reports to',
     confidence: line.confidence,
     relationType: line.relationType,
   }));
