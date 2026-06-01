@@ -105,16 +105,16 @@ function currentMode(state: AppState): OrgChartMode {
 }
 
 function levelLabelForPerson(person: Person, depth: number): string {
-  if (depth === 0) return 'L0 高管';
-  if (depth === 1) return 'L1 BU负责人';
-  if (depth === 2) return 'L2 部门负责人';
-  if (depth === 3) return 'L3 团队负责人';
+  if (depth === 0) return 'L0 楂樼';
+  if (depth === 1) return 'L1 BU璐熻矗浜?;
+  if (depth === 2) return 'L2 閮ㄩ棬璐熻矗浜?;
+  if (depth === 3) return 'L3 鍥㈤槦璐熻矗浜?;
   const text = `${person.currentTitle ?? ''}${person.tags.join(' ')}`;
-  if (/总经理|总裁|副总裁|VP|高管|核心目标/i.test(text)) return 'L0 高管';
-  if (/一级负责人/i.test(text)) return 'L1 BU负责人';
-  if (/二级负责人|总监|负责人|Head/i.test(text)) return 'L2 部门负责人';
-  if (/三级负责人|经理|主管|Lead/i.test(text)) return 'L3 团队负责人';
-  return 'IC/专家';
+  if (/鎬荤粡鐞唡鎬昏|鍓€昏|VP|楂樼|鏍稿績鐩爣/i.test(text)) return 'L0 楂樼';
+  if (/涓€绾ц礋璐ｄ汉/i.test(text)) return 'L1 BU璐熻矗浜?;
+  if (/浜岀骇璐熻矗浜簗鎬荤洃|璐熻矗浜簗Head/i.test(text)) return 'L2 閮ㄩ棬璐熻矗浜?;
+  if (/涓夌骇璐熻矗浜簗缁忕悊|涓荤|Lead/i.test(text)) return 'L3 鍥㈤槦璐熻矗浜?;
+  return 'IC/涓撳';
 }
 
 function topAncestorForName(
@@ -243,7 +243,7 @@ export function layoutIdForCanvasView(view: CanvasViewKey): string {
 
 export function getOrgMapLayout(state: AppState): CanvasLayout | undefined {
   const view = state.project.settings.activeCanvasView ?? 'recruiting';
-  return state.canvasLayouts?.[layoutIdForCanvasView(view)] ?? state.canvasLayouts?.[ORG_MAP_LAYOUT_ID];
+  return state.canvasLayouts?.[layoutIdForCanvasView(view)];
 }
 
 export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = getOrgMapLayout(state)): OrgGraph {
@@ -405,7 +405,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       status: person.status,
       updatedAt: person.updatedAt,
       evidenceCount: person.evidenceIds.length,
-      isTalent: person.tags.includes('关键人才池'),
+      isTalent: person.tags.includes('鍏抽敭浜烘墠姹?),
       isFocus: Boolean(focusName && name === focusName),
       depth,
       levelLabel: levelLabelForPerson(person, depth),
@@ -429,7 +429,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     id: line.id,
     source: nodeIdForName(line.managerName),
     target: nodeIdForName(line.subordinateName),
-    label: line.relationType === 'dotted-line' ? '虚线汇报' : line.relationType === 'manages' ? '管理' : '汇报',
+    label: line.relationType === 'dotted-line' ? '铏氱嚎姹囨姤' : line.relationType === 'manages' ? '绠＄悊' : '姹囨姤',
     confidence: line.confidence,
     relationType: line.relationType,
   }));
