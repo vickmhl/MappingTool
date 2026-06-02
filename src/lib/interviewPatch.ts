@@ -22,6 +22,11 @@ export interface MountSuggestion {
   confidence: EvidenceConfidence;
 }
 
+export interface FollowUpPrompt {
+  id: string;
+  label: string;
+}
+
 const INTERVIEW_FIELD_LABELS: Record<InterviewField['key'], string> = {
   currentTitle: '当前岗位',
   currentDepartment: '当前部门',
@@ -218,6 +223,37 @@ export function suggestMountTargets(
   }
 
   return suggestions;
+}
+
+export function buildFollowUpPrompts(fields: InterviewField[]): FollowUpPrompt[] {
+  const prompts: FollowUpPrompt[] = [];
+  const managerName = getInterviewFieldValue(fields, 'managerName');
+  const departmentName = getInterviewFieldValue(fields, 'currentDepartment');
+  const title = getInterviewFieldValue(fields, 'currentTitle');
+  const teamSize = getInterviewFieldValue(fields, 'teamSize');
+  const departmentHead = getInterviewFieldValue(fields, 'departmentHead');
+  const peerTeams = getInterviewFieldValue(fields, 'peerTeams');
+
+  if (!departmentName) {
+    prompts.push({ id: 'department', label: '先确认他现在挂在哪个正式部门，不要只记项目名。' });
+  }
+  if (!managerName) {
+    prompts.push({ id: 'manager', label: '继续追问：他现在直接汇报给谁？有没有虚线汇报？' });
+  }
+  if (!title) {
+    prompts.push({ id: 'title', label: '确认当前真实 title，区分简历写法和内部岗位叫法。' });
+  }
+  if (!teamSize) {
+    prompts.push({ id: 'team-size', label: '补问团队规模，大概多少人、其中多少直属。' });
+  }
+  if (!departmentHead && departmentName) {
+    prompts.push({ id: 'department-head', label: '补问这个部门的一号位是谁，方便后续挂载。' });
+  }
+  if (!peerTeams) {
+    prompts.push({ id: 'peer-teams', label: '补问平级团队名称，能帮助反推组织结构是否完整。' });
+  }
+
+  return prompts.slice(0, 4);
 }
 
 function fieldConfidence(fields: InterviewField[], key: InterviewField['key']): EvidenceConfidence {
