@@ -1805,9 +1805,9 @@ function OrgMapView({
       {showFilters && (
         <div className="map-controls primary-map-controls">
           <label>
-            公司
+            {'公司'}
             <select value={filters.company} onChange={(event) => setFilters({ ...filters, company: event.target.value })}>
-              <option value="">全部</option>
+              <option value="">{'全部'}</option>
               {state.project.companies.map((company) => (
                 <option key={company} value={company}>
                   {company}
@@ -1815,8 +1815,44 @@ function OrgMapView({
               ))}
             </select>
           </label>
+          <div className="filter-chip-grid primary-filter-chips">
+            <button
+              type="button"
+              className={filters.onlyManagers ? 'filter-chip active' : 'filter-chip'}
+              onClick={() => setFilters({ ...filters, onlyManagers: !filters.onlyManagers })}
+            >
+              {'仅看负责人'}
+            </button>
+            <button
+              type="button"
+              className={filters.onlyTalent ? 'filter-chip active' : 'filter-chip'}
+              onClick={() => setFilters({ ...filters, onlyTalent: !filters.onlyTalent })}
+            >
+              {'仅看关键人才'}
+            </button>
+            <button
+              type="button"
+              className={filters.onlyRecentChanges ? 'filter-chip active' : 'filter-chip'}
+              onClick={() => setFilters({ ...filters, onlyRecentChanges: !filters.onlyRecentChanges })}
+            >
+              {'仅看近期变化'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showFilters && showAdvancedFilters && (
+        <div className="map-controls advanced-map-controls">
           <label>
-            置信度 {Math.round(filters.minConfidence * 100)}%
+            {'负责人聚焦'}
+            <input
+              value={filters.focusPersonName}
+              placeholder={'输入姓名聚焦上下级链路'}
+              onChange={(event) => setFilters({ ...filters, focusPersonName: event.target.value })}
+            />
+          </label>
+          <label>
+            {'置信度 '}{Math.round(filters.minConfidence * 100)}{'%'}
             <input
               type="range"
               min="0"
@@ -1827,7 +1863,7 @@ function OrgMapView({
             />
           </label>
           <label>
-            节点上限
+            {'节点上限'}
             <input
               type="number"
               min="20"
@@ -1837,7 +1873,7 @@ function OrgMapView({
             />
           </label>
           <label>
-            层级
+            {'层级'}
             <input
               type="number"
               min="1"
@@ -1846,42 +1882,6 @@ function OrgMapView({
               onChange={(event) => setFilters({ ...filters, maxDepth: Number(event.target.value) })}
             />
           </label>
-        </div>
-      )}
-
-      {showFilters && showAdvancedFilters && (
-        <div className="map-controls advanced-map-controls">
-          <label>
-            负责人聚焦
-            <input
-              value={filters.focusPersonName}
-              placeholder="输入姓名聚焦上下级链路"
-              onChange={(event) => setFilters({ ...filters, focusPersonName: event.target.value })}
-            />
-          </label>
-          <div className="filter-chip-grid">
-            <button
-              type="button"
-              className={filters.onlyManagers ? 'filter-chip active' : 'filter-chip'}
-              onClick={() => setFilters({ ...filters, onlyManagers: !filters.onlyManagers })}
-            >
-              浠呯湅璐熻矗浜?
-            </button>
-            <button
-              type="button"
-              className={filters.onlyTalent ? 'filter-chip active' : 'filter-chip'}
-              onClick={() => setFilters({ ...filters, onlyTalent: !filters.onlyTalent })}
-            >
-              浠呯湅鍏抽敭浜烘墠
-            </button>
-            <button
-              type="button"
-              className={filters.onlyRecentChanges ? 'filter-chip active' : 'filter-chip'}
-              onClick={() => setFilters({ ...filters, onlyRecentChanges: !filters.onlyRecentChanges })}
-            >
-              浠呯湅杩戞湡鍙樺姩
-            </button>
-          </div>
           <button
             type="button"
             className="secondary-button"
@@ -1893,11 +1893,10 @@ function OrgMapView({
             }
           >
             <RotateCcw size={16} />
-            重置筛选
+            {'重置筛选'}
           </button>
         </div>
       )}
-
       {showManualRepair && (
         <section className="tool-panel manual-repair-panel">
           <div className="manual-repair-grid">
