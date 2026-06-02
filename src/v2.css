@@ -684,6 +684,43 @@
   color: #172033;
 }
 
+.mount-suggestion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.suggestion-confidence {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.suggestion-confidence.confidence-high {
+  color: #0f6b4f;
+  background: #e7f8f1;
+  border-color: #bde7d6;
+}
+
+.suggestion-confidence.confidence-medium {
+  color: #315b99;
+  background: #eef5ff;
+  border-color: #d7e7ff;
+}
+
+.suggestion-confidence.confidence-low {
+  color: #8a5d00;
+  background: #fff7e8;
+  border-color: #f2d39b;
+}
+
 .mount-suggestion-item span,
 .patch-item span,
 .interview-empty,
@@ -695,6 +732,25 @@
 .patch-item.patch-conflict {
   background: #fff9ef;
   border-color: #efd5a6;
+}
+
+.follow-up-list {
+  display: grid;
+  gap: 8px;
+}
+
+.follow-up-item {
+  padding: 11px 12px;
+  color: #314155;
+  background: #fbfcfe;
+  border: 1px solid #dbe5f0;
+  border-radius: 10px;
+}
+
+.follow-up-item strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #314155;
 }
 
 .patch-actions {
