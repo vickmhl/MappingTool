@@ -1946,7 +1946,7 @@ function OrgMapView({
               <>
                 <div className="interview-section">
                   <h3>候选人</h3>
-                  <div className="candidate-fields">
+                  <div className="candidate-fields call-mapping-grid">
                     <Field label="姓名" value={activeCandidate.name} onChange={(value) => updateCandidateProfileField('name', value)} />
                     <Field label="公司" value={activeCandidate.company ?? ''} onChange={(value) => updateCandidateProfileField('company', value)} />
                     <Field
@@ -1964,7 +1964,7 @@ function OrgMapView({
 
                 <div className="interview-section">
                   <h3>通话记录</h3>
-                  <div className="candidate-fields">
+                  <div className="candidate-fields call-mapping-grid">
                     <Field
                       label="当前岗位"
                       value={getInterviewFieldValue(interviewPreviewFields, 'currentTitle')}
@@ -2045,6 +2045,7 @@ function OrgMapView({
                       {followUpPrompts.map((prompt) => (
                         <div key={prompt.id} className="follow-up-item">
                           <strong>{prompt.label}</strong>
+                          <span>{prompt.hint}</span>
                         </div>
                       ))}
                     </div>
