@@ -21,6 +21,11 @@ export type ChangeEventType =
   | 'stale';
 
 export type ReportTemplateKey = 'executive' | 'recruiting' | 'external' | 'diagnostic';
+export type InterviewSourceType = 'phone' | 'wechat' | 'manual-note' | 'transcript';
+export type InterviewStatus = 'draft' | 'reviewing' | 'applied' | 'archived';
+export type EvidenceConfidence = 'high' | 'medium' | 'low';
+export type MapPatchStatus = 'draft' | 'accepted' | 'rejected' | 'conflict';
+export type MapPatchType = 'person' | 'orgUnit' | 'roleAssignment' | 'reportingLine' | 'changeEvent';
 
 export type AuditAction =
   | 'import'
@@ -191,6 +196,70 @@ export interface CandidateRecord<TPayload = unknown> {
   reason: string;
 }
 
+export interface CandidateProfile {
+  id: string;
+  name: string;
+  company?: string;
+  resumeTitle?: string;
+  resumeDepartment?: string;
+  claimedTitle?: string;
+  claimedDepartment?: string;
+  source: 'resume' | 'referral' | 'manual';
+  status: 'new' | 'interviewing' | 'mapped' | 'rejected';
+  personId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InterviewField {
+  key:
+    | 'currentTitle'
+    | 'currentDepartment'
+    | 'managerName'
+    | 'departmentHead'
+    | 'teamSize'
+    | 'peerTeams'
+    | 'directReports'
+    | 'recentChanges'
+    | 'rawNote';
+  label: string;
+  value: string;
+  confidence: EvidenceConfidence;
+}
+
+export interface InterviewSession {
+  id: string;
+  candidateId: string;
+  startedAt: string;
+  endedAt?: string;
+  sourceType: InterviewSourceType;
+  status: InterviewStatus;
+  rawNotes: string;
+  structuredNotes: InterviewField[];
+  evidenceIds: string[];
+  patchIds: string[];
+}
+
+export interface InterviewEvidence {
+  id: string;
+  sessionId: string;
+  text: string;
+  field?: string;
+  confidence: EvidenceConfidence;
+  createdAt: string;
+}
+
+export interface MapPatch {
+  id: string;
+  sessionId: string;
+  type: MapPatchType;
+  status: MapPatchStatus;
+  payload: unknown;
+  evidenceId: string;
+  confidence: EvidenceConfidence;
+  createdAt: string;
+}
+
 export interface RoleCandidatePayload {
   personName: string;
   title: string;
@@ -243,6 +312,10 @@ export interface AppState {
   roleAssignments: RoleAssignment[];
   reportingLines: ReportingLine[];
   changeEvents: ChangeEvent[];
+  candidateProfiles: CandidateProfile[];
+  interviewSessions: InterviewSession[];
+  interviewEvidence: InterviewEvidence[];
+  mapPatches: MapPatch[];
   canvasLayouts?: Record<string, CanvasLayout>;
   auditLog?: AuditEntry[];
 }
