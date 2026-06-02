@@ -100,6 +100,9 @@ const defaultFilters: OrgMapFilters = {
   minConfidence: 0.72,
   visibleLimit: 28,
   maxDepth: 2,
+  onlyTalent: false,
+  onlyRecentChanges: false,
+  onlyManagers: false,
 };
 
 const canvasPresets: Record<
@@ -794,9 +797,13 @@ function OrgMapView({
   const activeFilterCount = [
     filters.company,
     filters.search.trim(),
+    filters.focusPersonName.trim(),
     filters.minConfidence !== canvasPresets[activeView].filters.minConfidence,
     filters.visibleLimit !== canvasPresets[activeView].filters.visibleLimit,
     filters.maxDepth !== canvasPresets[activeView].filters.maxDepth,
+    filters.onlyTalent,
+    filters.onlyRecentChanges,
+    filters.onlyManagers,
   ].filter(Boolean).length;
   const draftInterviewSessions = useMemo(
     () =>
@@ -1852,10 +1859,38 @@ function OrgMapView({
               onChange={(event) => setFilters({ ...filters, focusPersonName: event.target.value })}
             />
           </label>
+          <div className="filter-chip-grid">
+            <button
+              type="button"
+              className={filters.onlyManagers ? 'filter-chip active' : 'filter-chip'}
+              onClick={() => setFilters({ ...filters, onlyManagers: !filters.onlyManagers })}
+            >
+              浠呯湅璐熻矗浜?
+            </button>
+            <button
+              type="button"
+              className={filters.onlyTalent ? 'filter-chip active' : 'filter-chip'}
+              onClick={() => setFilters({ ...filters, onlyTalent: !filters.onlyTalent })}
+            >
+              浠呯湅鍏抽敭浜烘墠
+            </button>
+            <button
+              type="button"
+              className={filters.onlyRecentChanges ? 'filter-chip active' : 'filter-chip'}
+              onClick={() => setFilters({ ...filters, onlyRecentChanges: !filters.onlyRecentChanges })}
+            >
+              浠呯湅杩戞湡鍙樺姩
+            </button>
+          </div>
           <button
             type="button"
             className="secondary-button"
-            onClick={() => setFilters({ ...canvasPresets[activeView].filters, company: '', search: '', focusPersonName: '' })}
+            onClick={() =>
+              setFilters({
+                ...defaultFilters,
+                ...canvasPresets[activeView].filters,
+              })
+            }
           >
             <RotateCcw size={16} />
             重置筛选
@@ -1892,7 +1927,7 @@ function OrgMapView({
         </section>
       )}
 
-      {graph.truncated && <div className="inline-warning">当前筛选命中 {graph.totalBeforeLimit} 人，仅渲染前 {filters.visibleLimit} 个节点。</div>}
+      {graph.truncated && <div className="inline-warning">当前筛选命中 {graph.totalBeforeLimit} 人，仅渲染前 {graph.renderedLimit} 个节点。</div>}
 
       <div
         className={
