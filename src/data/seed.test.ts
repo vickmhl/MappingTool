@@ -3,6 +3,19 @@ import { createMapBusinessDemoState } from './seed';
 import { buildOrgGraph, layoutIdForCanvasView, ORG_MAP_LAYOUT_ID } from '../lib/graph';
 import { normalizeName } from '../lib/ids';
 
+const makeFilters = (overrides: Partial<Parameters<typeof buildOrgGraph>[1]> = {}) => ({
+  company: '',
+  search: '',
+  focusPersonName: '',
+  minConfidence: 0.72,
+  visibleLimit: 28,
+  maxDepth: 2,
+  onlyTalent: false,
+  onlyRecentChanges: false,
+  onlyManagers: false,
+  ...overrides,
+});
+
 describe('seed data', () => {
   it('creates a large virtual map business sample for canvas testing', () => {
     const state = createMapBusinessDemoState();
@@ -53,14 +66,7 @@ describe('seed data', () => {
       },
     };
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: targetName,
-      focusPersonName: '',
-      minConfidence: 0.5,
-      visibleLimit: 20,
-      maxDepth: 2,
-    });
+    const graph = buildOrgGraph(state, makeFilters({ search: targetName, minConfidence: 0.5, visibleLimit: 20 }));
     const node = graph.nodes.find((item) => item.id === targetId);
 
     expect(node?.x).toBe(480);
@@ -86,14 +92,7 @@ describe('seed data', () => {
       },
     };
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.72,
-      visibleLimit: 28,
-      maxDepth: 2,
-    });
+    const graph = buildOrgGraph(state, makeFilters());
     const node = graph.nodes.find((item) => item.id === targetId);
 
     expect(node?.x).not.toBe(2400);
@@ -104,14 +103,7 @@ describe('seed data', () => {
     const state = createMapBusinessDemoState();
     state.project.settings.orgChartMode = 'formal';
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.5,
-      visibleLimit: 120,
-      maxDepth: 2,
-    });
+    const graph = buildOrgGraph(state, makeFilters({ minConfidence: 0.5, visibleLimit: 120 }));
 
     expect(graph.lanes.length).toBeGreaterThan(3);
     expect(graph.diagnostics.hiddenDirectReports).toBeGreaterThan(0);
@@ -137,14 +129,7 @@ describe('seed data', () => {
       },
     };
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.5,
-      visibleLimit: 32,
-      maxDepth: 1,
-    });
+    const graph = buildOrgGraph(state, makeFilters({ minConfidence: 0.5, visibleLimit: 32, maxDepth: 1 }));
     const node = graph.nodes.find((item) => item.id === targetId);
 
     expect(node?.x).toBe(720);
