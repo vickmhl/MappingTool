@@ -167,7 +167,7 @@
 }
 
 .primary-map-controls {
-  grid-template-columns: 180px minmax(220px, 1fr) 130px 110px;
+  grid-template-columns: 180px minmax(320px, 1fr);
   align-items: end;
   padding: 12px;
   background: var(--v3-panel);
@@ -176,7 +176,7 @@
 }
 
 .advanced-map-controls {
-  grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.2fr) 120px 100px auto;
   gap: 12px;
   align-items: end;
   background: var(--v3-panel);
@@ -189,6 +189,10 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.primary-filter-chips {
+  align-self: stretch;
 }
 
 .filter-chip {
