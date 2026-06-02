@@ -44,6 +44,7 @@ import { downloadBlob, exportOrgGraphPng, exportReportPptx } from './lib/exporte
 import { createId, normalizeName } from './lib/ids';
 import {
   applyAcceptedMapPatch,
+  buildFollowUpPrompts,
   buildInterviewArtifacts,
   getInterviewFieldValue,
   mergeInterviewFields,
@@ -822,6 +823,10 @@ function OrgMapView({
         : [],
     [activeCandidate, activeInterview, interviewPreviewFields, state],
   );
+  const followUpPrompts = useMemo(
+    () => (activeInterview ? buildFollowUpPrompts(interviewPreviewFields) : []),
+    [activeInterview, interviewPreviewFields],
+  );
   const interviewPatches = useMemo(
     () => state.mapPatches.filter((patch) => patch.sessionId === activeInterviewId),
     [activeInterviewId, state.mapPatches],
@@ -836,6 +841,10 @@ function OrgMapView({
     setShowManualRepair(true);
     onManualRepairOpened();
   }, [onManualRepairOpened, openManualRepair]);
+
+  useEffect(() => {
+    if (businessMode !== 'recruiting' && showCallMapping) setShowCallMapping(false);
+  }, [businessMode, showCallMapping]);
 
   useEffect(() => {
     if (!showCallMapping) return;
@@ -1326,7 +1335,7 @@ function OrgMapView({
     [editMode, graph.nodes, isReportMode, isTree, selectedNodeId],
   );
   const draftGraphNodes: Node[] = useMemo(() => {
-    if (!activeInterview || pendingInterviewPatches.length === 0) return [];
+    if (businessMode !== 'recruiting' || !activeInterview || pendingInterviewPatches.length === 0) return [];
     const confirmedNodeById = new Map(graph.nodes.map((node) => [node.id, node]));
     const confirmedNodeByName = new Map(graph.nodes.map((node) => [normalizeName(node.label), node]));
     const maxX = graph.nodes.length > 0 ? Math.max(...graph.nodes.map((node) => node.x)) : 640;
@@ -1405,6 +1414,7 @@ function OrgMapView({
   }, [
     activeCandidate,
     activeInterview,
+    businessMode,
     existingCandidateMatch,
     filters.company,
     graph.nodes,
@@ -1443,7 +1453,7 @@ function OrgMapView({
         };
       });
 
-      if (!activeInterview || pendingInterviewPatches.length === 0) return baseEdges;
+      if (businessMode !== 'recruiting' || !activeInterview || pendingInterviewPatches.length === 0) return baseEdges;
 
       const draftEdges: Edge[] = [];
       const managerName = getInterviewFieldValue(interviewPreviewFields, 'managerName');
@@ -1486,7 +1496,7 @@ function OrgMapView({
 
       return [...baseEdges, ...draftEdges];
     },
-    [activeInterview, graph.edges, graph.nodes, interviewPreviewFields, isTree, pendingInterviewPatches],
+    [activeInterview, businessMode, graph.edges, graph.nodes, interviewPreviewFields, isTree, pendingInterviewPatches],
   );
 
   useEffect(() => setNodes([...graphNodes, ...draftGraphNodes]), [draftGraphNodes, graphNodes]);
@@ -1669,20 +1679,22 @@ function OrgMapView({
           />
         </label>
         <div className="canvas-actions primary-canvas-actions">
-          <button
-            type="button"
-            className={showCallMapping ? 'secondary-button active-filter' : 'secondary-button'}
-            onClick={() => {
-              if (showCallMapping) {
-                setShowCallMapping(false);
-                return;
-              }
-              openCallMappingPanel();
-            }}
-          >
-            <PhoneCall size={16} />
-            通话补图
-          </button>
+          {businessMode === 'recruiting' && (
+            <button
+              type="button"
+              className={showCallMapping ? 'secondary-button active-filter' : 'secondary-button'}
+              onClick={() => {
+                if (showCallMapping) {
+                  setShowCallMapping(false);
+                  return;
+                }
+                openCallMappingPanel();
+              }}
+            >
+              <PhoneCall size={16} />
+              通话补图
+            </button>
+          )}
           <button
             type="button"
             className={showFilters || activeFilterCount > 0 ? 'secondary-button active-filter' : 'secondary-button'}
@@ -1910,7 +1922,7 @@ function OrgMapView({
           </ReactFlow>
         </div>
 
-        {showCallMapping && (
+        {showCallMapping && businessMode === 'recruiting' && (
           <aside className="call-mapping-panel">
             <div className="org-inspector-head">
               <div>
@@ -2011,13 +2023,33 @@ function OrgMapView({
                     <div className="mount-suggestion-list">
                       {interviewSuggestions.map((suggestion, index) => (
                         <div key={`${suggestion.label}-${index}`} className="mount-suggestion-item">
-                          <strong>{suggestion.label}</strong>
+                          <div className="mount-suggestion-head">
+                            <strong>{suggestion.label}</strong>
+                            <span className={`suggestion-confidence confidence-${suggestion.confidence}`}>
+                              {suggestion.confidence === 'high' ? '高把握' : suggestion.confidence === 'medium' ? '可参考' : '待核实'}
+                            </span>
+                          </div>
                           <span>{suggestion.reason}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
                     <p className="interview-empty">先补充部门、上级或岗位信息，系统才能推荐挂载位置。</p>
+                  )}
+                </div>
+
+                <div className="interview-section">
+                  <h3>建议追问</h3>
+                  {followUpPrompts.length > 0 ? (
+                    <div className="follow-up-list">
+                      {followUpPrompts.map((prompt) => (
+                        <div key={prompt.id} className="follow-up-item">
+                          <strong>{prompt.label}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="interview-empty">核心组织信息已经相对完整，可以直接生成补图建议。</p>
                   )}
                 </div>
 
