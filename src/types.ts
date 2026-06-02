@@ -334,4 +334,7 @@ export interface OrgMapFilters {
   minConfidence: number;
   visibleLimit: number;
   maxDepth: number;
+  onlyTalent: boolean;
+  onlyRecentChanges: boolean;
+  onlyManagers: boolean;
 }
