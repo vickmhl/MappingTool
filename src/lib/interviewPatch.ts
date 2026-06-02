@@ -25,6 +25,7 @@ export interface MountSuggestion {
 export interface FollowUpPrompt {
   id: string;
   label: string;
+  hint: string;
 }
 
 const INTERVIEW_FIELD_LABELS: Record<InterviewField['key'], string> = {
@@ -167,8 +168,8 @@ export function suggestMountTargets(
       suggestions.push({
         targetType: 'person',
         targetId: exactManager.id,
-        label: `挂到上级 ${exactManager.name} 下`,
-        reason: '候选人明确提供了直属上级',
+        label: `优先挂到 ${exactManager.name} 名下`,
+        reason: '候选人明确说了直属上级，可以先按汇报线落位。',
         confidence: 'high',
       });
     } else {
@@ -176,8 +177,8 @@ export function suggestMountTargets(
         suggestions.push({
           targetType: 'person',
           targetId: person.id,
-          label: `可能挂到 ${person.name} 下`,
-          reason: '上级姓名模糊匹配',
+          label: `可能挂到 ${person.name} 名下`,
+          reason: '上级姓名只能模糊匹配，建议继续核对 title 或部门。',
           confidence: 'medium',
         });
       }
@@ -190,8 +191,8 @@ export function suggestMountTargets(
       suggestions.push({
         targetType: 'orgUnit',
         targetId: exactOrg.id,
-        label: `挂到部门 ${exactOrg.name}`,
-        reason: '部门名称精确匹配',
+        label: `先挂到部门 ${exactOrg.name}`,
+        reason: managerName ? '部门能对上，但上级仍建议继续核实。' : '部门名称精确匹配，可以先按部门落位。',
         confidence: managerName ? 'medium' : 'high',
       });
     } else {
@@ -200,14 +201,14 @@ export function suggestMountTargets(
           targetType: 'orgUnit',
           targetId: orgUnit.id,
           label: `可能挂到部门 ${orgUnit.name}`,
-          reason: '部门名称模糊匹配',
+          reason: '部门名只能模糊匹配，建议补问正式部门全称。',
           confidence: 'low',
         });
       }
       suggestions.push({
         targetType: 'newOrgUnit',
         label: `新建待确认部门 ${departmentName}`,
-        reason: '当前图中未找到匹配部门',
+        reason: '当前图里没有找到这个部门，先作为待确认部门保留。',
         confidence: 'low',
       });
     }
@@ -217,7 +218,7 @@ export function suggestMountTargets(
     suggestions.push({
       targetType: 'unassigned',
       label: `先放入待归属人员池`,
-      reason: '暂未识别到上级或部门',
+      reason: '上级和部门都还不清楚，先不要强行挂载。',
       confidence: 'low',
     });
   }
@@ -235,22 +236,46 @@ export function buildFollowUpPrompts(fields: InterviewField[]): FollowUpPrompt[]
   const peerTeams = getInterviewFieldValue(fields, 'peerTeams');
 
   if (!departmentName) {
-    prompts.push({ id: 'department', label: '先确认他现在挂在哪个正式部门，不要只记项目名。' });
+    prompts.push({
+      id: 'department',
+      label: '你现在正式挂在哪个部门？',
+      hint: '不要只记项目名，优先问正式部门全称。',
+    });
   }
   if (!managerName) {
-    prompts.push({ id: 'manager', label: '继续追问：他现在直接汇报给谁？有没有虚线汇报？' });
+    prompts.push({
+      id: 'manager',
+      label: '你现在直接汇报给谁？有虚线汇报吗？',
+      hint: '先拿到直属上级姓名，再补是否双汇报。',
+    });
   }
   if (!title) {
-    prompts.push({ id: 'title', label: '确认当前真实 title，区分简历写法和内部岗位叫法。' });
+    prompts.push({
+      id: 'title',
+      label: '你现在内部正式 title 是什么？',
+      hint: '区分简历写法和内部岗位叫法。',
+    });
   }
   if (!teamSize) {
-    prompts.push({ id: 'team-size', label: '补问团队规模，大概多少人、其中多少直属。' });
+    prompts.push({
+      id: 'team-size',
+      label: '你们团队大概多少人，其中多少是你直接带的？',
+      hint: '先问总规模，再问直属人数。',
+    });
   }
   if (!departmentHead && departmentName) {
-    prompts.push({ id: 'department-head', label: '补问这个部门的一号位是谁，方便后续挂载。' });
+    prompts.push({
+      id: 'department-head',
+      label: '这个部门一号位是谁？',
+      hint: '拿到部门一号位，后面挂载会更准。',
+    });
   }
   if (!peerTeams) {
-    prompts.push({ id: 'peer-teams', label: '补问平级团队名称，能帮助反推组织结构是否完整。' });
+    prompts.push({
+      id: 'peer-teams',
+      label: '和你平级、最常一起提到的几个团队叫什么？',
+      hint: '平级团队能帮助反推组织结构是否完整。',
+    });
   }
 
   return prompts.slice(0, 4);
