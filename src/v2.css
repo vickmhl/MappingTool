@@ -560,11 +560,35 @@
   top: 74px;
   display: grid;
   gap: 16px;
+  align-self: start;
+  max-height: calc(100vh - 96px);
+  overflow: auto;
   padding: 18px;
   background: #ffffff;
   border: 1px solid var(--v3-line);
   border-radius: 12px;
   box-shadow: 0 16px 30px rgb(15 23 42 / 7%);
+}
+
+.call-mapping-panel .candidate-fields.call-mapping-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.call-mapping-panel .field {
+  min-width: 0;
+}
+
+.call-mapping-panel .field input,
+.call-mapping-panel .field textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.call-mapping-panel .field.wide {
+  margin: 0;
 }
 
 .org-inspector-head {
@@ -740,6 +764,8 @@
 }
 
 .follow-up-item {
+  display: grid;
+  gap: 4px;
   padding: 11px 12px;
   color: #314155;
   background: #fbfcfe;
@@ -751,6 +777,29 @@
   font-size: 13px;
   font-weight: 600;
   color: #314155;
+}
+
+.follow-up-item span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #627183;
+}
+
+@media (max-width: 1320px) {
+  .map-canvas-shell.has-call-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .call-mapping-panel {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .call-mapping-panel .candidate-fields.call-mapping-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .patch-actions {
