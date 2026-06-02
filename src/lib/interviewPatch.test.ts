@@ -3,6 +3,7 @@ import { createEmptyState } from '../data/seed';
 import { createId, nowIso } from './ids';
 import {
   applyAcceptedMapPatch,
+  buildFollowUpPrompts,
   buildInterviewArtifacts,
   parseInterviewQuickNotes,
   suggestMountTargets,
@@ -114,6 +115,16 @@ describe('interview patch helpers', () => {
     expect(artifacts.patches.some((patch) => patch.type === 'reportingLine')).toBe(true);
     expect(artifacts.patches.some((patch) => patch.type === 'changeEvent')).toBe(true);
     expect(artifacts.suggestions[0]?.targetType).toBe('person');
+  });
+
+  it('suggests follow-up prompts for missing critical org fields', () => {
+    const prompts = buildFollowUpPrompts([
+      { key: 'currentDepartment', label: '当前部门', value: '地图渲染引擎部', confidence: 'medium' },
+    ]);
+
+    expect(prompts.some((prompt) => prompt.id === 'manager')).toBe(true);
+    expect(prompts.some((prompt) => prompt.id === 'title')).toBe(true);
+    expect(prompts.some((prompt) => prompt.id === 'department-head')).toBe(true);
   });
 
   it('applies an accepted person patch into the formal org state', () => {
