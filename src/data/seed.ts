@@ -54,6 +54,10 @@ export function createEmptyState(): AppState {
     roleAssignments: [],
     reportingLines: [],
     changeEvents: [],
+    candidateProfiles: [],
+    interviewSessions: [],
+    interviewEvidence: [],
+    mapPatches: [],
     canvasLayouts: {},
     auditLog: [],
   };
@@ -97,6 +101,10 @@ export function ensureStateShape(state: AppState): AppState {
         },
       },
     },
+    candidateProfiles: state.candidateProfiles ?? [],
+    interviewSessions: state.interviewSessions ?? [],
+    interviewEvidence: state.interviewEvidence ?? [],
+    mapPatches: state.mapPatches ?? [],
     canvasLayouts: state.canvasLayouts ?? {},
     auditLog: state.auditLog ?? [],
   };
