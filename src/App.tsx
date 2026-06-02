@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   BriefcaseBusiness,
   Check,
   Download,
@@ -10,6 +11,7 @@ import {
   MoreHorizontal,
   Move,
   Network,
+  PhoneCall,
   RotateCcw,
   Save,
   Search,
@@ -40,13 +42,27 @@ import { addImportResult, updateCandidateStatus } from './lib/merge';
 import { exportEncryptedProjectPackage, importEncryptedProjectPackage } from './lib/projectPackage';
 import { downloadBlob, exportOrgGraphPng, exportReportPptx } from './lib/exporters';
 import { createId, normalizeName } from './lib/ids';
+import {
+  applyAcceptedMapPatch,
+  buildInterviewArtifacts,
+  getInterviewFieldValue,
+  mergeInterviewFields,
+  parseInterviewQuickNotes,
+  suggestMountTargets,
+  upsertInterviewField,
+  type MountSuggestion,
+} from './lib/interviewPatch';
 import type {
   AnyCandidatePayload,
   AppState,
   AuditAction,
   CandidateKind,
+  CandidateProfile,
   CandidateRecord,
   ChangeCandidatePayload,
+  InterviewField,
+  InterviewSession,
+  MapPatch,
   OrgChartMode,
   OrgChartExportFormat,
   OrgMapFilters,
@@ -212,6 +228,34 @@ function candidateSummary(candidate: CandidateRecord<AnyCandidatePayload>): stri
   if ('description' in payload) return payload.description;
   if ('name' in payload) return payload.name;
   return kindLabel[candidate.kind];
+}
+
+function mapPatchTypeLabel(type: MapPatch['type']): string {
+  return {
+    person: '新增人员',
+    orgUnit: '新增部门',
+    roleAssignment: '新增任职',
+    reportingLine: '新增汇报线',
+    changeEvent: '新增备注',
+  }[type];
+}
+
+function mapPatchSummary(patch: MapPatch): string {
+  const payload = patch.payload as Record<string, unknown>;
+  switch (patch.type) {
+    case 'person':
+      return `${String(payload.name ?? '候选人')} 将进入组织图`;
+    case 'orgUnit':
+      return `补充部门 ${String(payload.name ?? '待确认部门')}`;
+    case 'roleAssignment':
+      return `${String(payload.personName ?? '候选人')} / ${String(payload.title ?? '岗位待确认')}`;
+    case 'reportingLine':
+      return `${String(payload.subordinateName ?? '候选人')} -> ${String(payload.managerName ?? '上级待确认')}`;
+    case 'changeEvent':
+      return String(payload.description ?? '补充通话备注');
+    default:
+      return '待确认补丁';
+  }
 }
 
 function formatDate(value?: string): string {
@@ -470,6 +514,7 @@ function App() {
           <OrgMapView
             state={state}
             setState={setState}
+            setToast={setToast}
             filters={filters}
             setFilters={setFilters}
             graph={graph}
@@ -705,6 +750,7 @@ function CandidateEditor({
 function OrgMapView({
   state,
   setState,
+  setToast,
   filters,
   setFilters,
   graph,
@@ -715,6 +761,7 @@ function OrgMapView({
 }: {
   state: AppState;
   setState: Dispatch<SetStateAction<AppState>>;
+  setToast: Dispatch<SetStateAction<string>>;
   filters: OrgMapFilters;
   setFilters: (filters: OrgMapFilters) => void;
   graph: ReturnType<typeof buildOrgGraph>;
@@ -726,6 +773,8 @@ function OrgMapView({
   const [editMode, setEditMode] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [showManualRepair, setShowManualRepair] = useState(false);
+  const [showCallMapping, setShowCallMapping] = useState(false);
+  const [activeInterviewId, setActiveInterviewId] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [manualPerson, setManualPerson] = useState({ name: '', title: '', department: '', company: '' });
@@ -748,12 +797,269 @@ function OrgMapView({
     filters.visibleLimit !== canvasPresets[activeView].filters.visibleLimit,
     filters.maxDepth !== canvasPresets[activeView].filters.maxDepth,
   ].filter(Boolean).length;
+  const draftInterviewSessions = useMemo(
+    () =>
+      state.interviewSessions
+        .filter((session) => session.status === 'draft' || session.status === 'reviewing')
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+    [state.interviewSessions],
+  );
+  const activeInterview = state.interviewSessions.find((session) => session.id === activeInterviewId);
+  const activeCandidate = activeInterview
+    ? state.candidateProfiles.find((candidate) => candidate.id === activeInterview.candidateId)
+    : undefined;
+  const interviewPreviewFields = useMemo(
+    () =>
+      activeInterview
+        ? mergeInterviewFields(activeInterview.structuredNotes, parseInterviewQuickNotes(activeInterview.rawNotes))
+        : [],
+    [activeInterview],
+  );
+  const interviewSuggestions = useMemo(
+    () =>
+      activeCandidate && activeInterview
+        ? suggestMountTargets(state, activeCandidate.name, activeCandidate.company, interviewPreviewFields)
+        : [],
+    [activeCandidate, activeInterview, interviewPreviewFields, state],
+  );
+  const interviewPatches = useMemo(
+    () => state.mapPatches.filter((patch) => patch.sessionId === activeInterviewId),
+    [activeInterviewId, state.mapPatches],
+  );
+  const pendingInterviewPatches = interviewPatches.filter((patch) => patch.status === 'draft' || patch.status === 'conflict');
+  const existingCandidateMatch = activeCandidate?.name
+    ? state.people.find((person) => normalizeName(person.name) === normalizeName(activeCandidate.name))
+    : undefined;
 
   useEffect(() => {
     if (!openManualRepair) return;
     setShowManualRepair(true);
     onManualRepairOpened();
   }, [onManualRepairOpened, openManualRepair]);
+
+  useEffect(() => {
+    if (!showCallMapping) return;
+    if (activeInterview) return;
+    if (draftInterviewSessions.length > 0) setActiveInterviewId(draftInterviewSessions[0].id);
+  }, [activeInterview, draftInterviewSessions, showCallMapping]);
+
+  const openCallMappingPanel = () => {
+    let nextSessionId = activeInterviewId;
+    setState((current) => {
+      if (nextSessionId && current.interviewSessions.some((session) => session.id === nextSessionId)) return current;
+      const latestDraft = current.interviewSessions
+        .filter((session) => session.status === 'draft' || session.status === 'reviewing')
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+      if (latestDraft) {
+        nextSessionId = latestDraft.id;
+        return current;
+      }
+      const timestamp = new Date().toISOString();
+      const candidateId = createId('candidate');
+      nextSessionId = createId('session');
+      return {
+        ...current,
+        candidateProfiles: [
+          {
+            id: candidateId,
+            name: '',
+            company: filters.company || current.project.companies[0] || '',
+            resumeTitle: '',
+            resumeDepartment: '',
+            source: 'resume',
+            status: 'interviewing',
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+          ...current.candidateProfiles,
+        ],
+        interviewSessions: [
+          {
+            id: nextSessionId,
+            candidateId,
+            startedAt: timestamp,
+            sourceType: 'phone',
+            status: 'draft',
+            rawNotes: '',
+            structuredNotes: [],
+            evidenceIds: [],
+            patchIds: [],
+          },
+          ...current.interviewSessions,
+        ],
+      };
+    });
+    setShowCallMapping(true);
+    setShowManualRepair(false);
+    if (nextSessionId) setActiveInterviewId(nextSessionId);
+  };
+
+  const updateCandidateProfileField = (field: keyof CandidateProfile, value: string) => {
+    if (!activeCandidate) return;
+    setState((current) => {
+      const next = structuredClone(current);
+      const candidate = next.candidateProfiles.find((item) => item.id === activeCandidate.id);
+      if (!candidate) return current;
+      switch (field) {
+        case 'name':
+          candidate.name = value;
+          break;
+        case 'company':
+          candidate.company = value;
+          break;
+        case 'resumeTitle':
+          candidate.resumeTitle = value;
+          break;
+        case 'resumeDepartment':
+          candidate.resumeDepartment = value;
+          break;
+        case 'claimedTitle':
+          candidate.claimedTitle = value;
+          break;
+        case 'claimedDepartment':
+          candidate.claimedDepartment = value;
+          break;
+        default:
+          break;
+      }
+      candidate.updatedAt = new Date().toISOString();
+      return next;
+    });
+  };
+
+  const updateInterviewFieldValue = (key: InterviewField['key'], value: string) => {
+    if (!activeInterview) return;
+    setState((current) => {
+      const next = structuredClone(current);
+      const session = next.interviewSessions.find((item) => item.id === activeInterview.id);
+      if (!session) return current;
+      session.structuredNotes = upsertInterviewField(session.structuredNotes, key, value);
+      if (key === 'currentTitle' || key === 'currentDepartment') {
+        const candidate = next.candidateProfiles.find((item) => item.id === session.candidateId);
+        if (candidate) {
+          if (key === 'currentTitle') candidate.claimedTitle = value.trim() || undefined;
+          if (key === 'currentDepartment') candidate.claimedDepartment = value.trim() || undefined;
+          candidate.updatedAt = new Date().toISOString();
+        }
+      }
+      return next;
+    });
+  };
+
+  const updateInterviewRawNotes = (value: string) => {
+    if (!activeInterview) return;
+    setState((current) => {
+      const next = structuredClone(current);
+      const session = next.interviewSessions.find((item) => item.id === activeInterview.id);
+      if (!session) return current;
+      session.rawNotes = value;
+      return next;
+    });
+  };
+
+  const saveInterviewDraft = () => {
+    if (!activeInterview) return;
+    setState((current) => {
+      const next = structuredClone(current);
+      const session = next.interviewSessions.find((item) => item.id === activeInterview.id);
+      if (!session) return current;
+      session.status = 'draft';
+      return appendAudit(next, 'talent-updated', '保存通话补图草稿', { view: 'map' });
+    });
+    setToast('已保存通话补图草稿');
+  };
+
+  const generateInterviewPatches = () => {
+    if (!activeInterview || !activeCandidate) return;
+    if (!activeCandidate.name.trim()) {
+      setToast('先填写候选人姓名，再生成补图建议');
+      return;
+    }
+    const artifacts = buildInterviewArtifacts(state, activeCandidate, activeInterview);
+    setState((current) => {
+      const next = structuredClone(current);
+      const session = next.interviewSessions.find((item) => item.id === activeInterview.id);
+      const candidate = next.candidateProfiles.find((item) => item.id === activeInterview.candidateId);
+      if (!session || !candidate) return current;
+      next.interviewEvidence = next.interviewEvidence.filter((item) => item.sessionId !== activeInterview.id);
+      next.mapPatches = next.mapPatches.filter((item) => item.sessionId !== activeInterview.id);
+      next.interviewEvidence.unshift(...artifacts.evidence);
+      next.mapPatches.unshift(...artifacts.patches);
+      session.structuredNotes = artifacts.mergedFields;
+      session.evidenceIds = artifacts.evidence.map((item) => item.id);
+      session.patchIds = artifacts.patches.map((item) => item.id);
+      session.status = 'reviewing';
+      candidate.claimedTitle = getInterviewFieldValue(artifacts.mergedFields, 'currentTitle') || candidate.claimedTitle;
+      candidate.claimedDepartment =
+        getInterviewFieldValue(artifacts.mergedFields, 'currentDepartment') || candidate.claimedDepartment;
+      candidate.personId = artifacts.matchedPersonId ?? candidate.personId;
+      candidate.status = 'interviewing';
+      candidate.updatedAt = new Date().toISOString();
+      return appendAudit(next, 'talent-updated', `生成 ${candidate.name} 的通话补图建议`, {
+        entityCount: artifacts.patches.length,
+        view: 'map',
+      });
+    });
+    setToast(`已生成 ${artifacts.patches.length} 条待确认补图建议`);
+  };
+
+  const updatePatchStatus = (patchId: string, status: MapPatch['status']) => {
+    setState((current) => {
+      let next = structuredClone(current);
+      const patchIndex = next.mapPatches.findIndex((patch) => patch.id === patchId);
+      if (patchIndex < 0) return current;
+      next.mapPatches[patchIndex].status = status;
+      if (status === 'accepted') next = applyAcceptedMapPatch(next, next.mapPatches[patchIndex]);
+
+      const session = next.interviewSessions.find((item) => item.id === activeInterviewId);
+      const candidate = session ? next.candidateProfiles.find((item) => item.id === session.candidateId) : undefined;
+      const sessionPatches = next.mapPatches.filter((patch) => patch.sessionId === activeInterviewId);
+      const hasDrafts = sessionPatches.some((patch) => patch.status === 'draft');
+      const hasAccepted = sessionPatches.some((patch) => patch.status === 'accepted');
+      if (session) session.status = hasDrafts ? 'reviewing' : hasAccepted ? 'applied' : session.status;
+      if (candidate) {
+        const matched = next.people.find((person) => normalizeName(person.name) === normalizeName(candidate.name));
+        if (matched) candidate.personId = matched.id;
+        candidate.status = hasDrafts ? 'interviewing' : hasAccepted ? 'mapped' : candidate.status;
+        candidate.updatedAt = new Date().toISOString();
+      }
+
+      return appendAudit(
+        next,
+        'talent-updated',
+        status === 'accepted' ? `确认补图项 ${patchId}` : `更新补图项状态 ${status}`,
+        { view: 'map' },
+      );
+    });
+  };
+
+  const acceptAllInterviewPatches = () => {
+    if (pendingInterviewPatches.length === 0) return;
+    const pendingIds = pendingInterviewPatches.map((patch) => patch.id);
+    setState((current) => {
+      let next = structuredClone(current);
+      for (const patchId of pendingIds) {
+        const patchIndex = next.mapPatches.findIndex((patch) => patch.id === patchId);
+        if (patchIndex < 0) continue;
+        next.mapPatches[patchIndex].status = 'accepted';
+        next = applyAcceptedMapPatch(next, next.mapPatches[patchIndex]);
+      }
+      const session = next.interviewSessions.find((item) => item.id === activeInterviewId);
+      const candidate = session ? next.candidateProfiles.find((item) => item.id === session.candidateId) : undefined;
+      if (session) session.status = 'applied';
+      if (candidate) {
+        const matched = next.people.find((person) => normalizeName(person.name) === normalizeName(candidate.name));
+        if (matched) candidate.personId = matched.id;
+        candidate.status = 'mapped';
+        candidate.updatedAt = new Date().toISOString();
+      }
+      return appendAudit(next, 'talent-updated', '批量确认通话补图建议', {
+        entityCount: pendingIds.length,
+        view: 'map',
+      });
+    });
+    setToast(`已确认 ${pendingIds.length} 条补图建议`);
+  };
 
   const applyCanvasView = (view: CanvasViewKey) => {
     const preset = canvasPresets[view];
@@ -1019,11 +1325,99 @@ function OrgMapView({
       }),
     [editMode, graph.nodes, isReportMode, isTree, selectedNodeId],
   );
-  const [nodes, setNodes] = useState<Node[]>(graphNodes);
+  const draftGraphNodes: Node[] = useMemo(() => {
+    if (!activeInterview || pendingInterviewPatches.length === 0) return [];
+    const confirmedNodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+    const confirmedNodeByName = new Map(graph.nodes.map((node) => [normalizeName(node.label), node]));
+    const maxX = graph.nodes.length > 0 ? Math.max(...graph.nodes.map((node) => node.x)) : 640;
+    const rootNode = graph.nodes.find((node) => node.depth === 0);
+    const candidateName = activeCandidate?.name.trim() ?? '';
+    const departmentName = getInterviewFieldValue(interviewPreviewFields, 'currentDepartment');
+    const managerName = getInterviewFieldValue(interviewPreviewFields, 'managerName');
+    const primarySuggestion = interviewSuggestions[0];
+    const anchorNode =
+      (primarySuggestion?.targetType === 'person' && primarySuggestion.targetId
+        ? confirmedNodeById.get(`person:${normalizeName(state.people.find((person) => person.id === primarySuggestion.targetId)?.name ?? '')}`)
+        : undefined) ??
+      (managerName ? confirmedNodeByName.get(normalizeName(managerName)) : undefined) ??
+      (departmentName
+        ? graph.nodes.find((node) => normalizeName(node.department ?? '') === normalizeName(departmentName))
+        : undefined) ??
+      rootNode;
+
+    const anchorX = anchorNode?.x ?? maxX + 120;
+    const anchorY = anchorNode?.y ?? 120;
+    const nodes: Node[] = [];
+    let personDraftY = anchorY + 18;
+
+    const personPatch = pendingInterviewPatches.find((patch) => patch.type === 'person');
+    if (personPatch) {
+      nodes.push({
+        id: `draft:${personPatch.id}`,
+        position: { x: anchorX + 286, y: personDraftY },
+        draggable: false,
+        type: 'default',
+        data: {
+          label: (
+            <div className="flow-node draft-node draft-person-node">
+              <div className="flow-node-top">
+                <strong>{candidateName || '待确认候选人'}</strong>
+                <small>通话新增</small>
+              </div>
+              <span>{getInterviewFieldValue(interviewPreviewFields, 'currentTitle') || activeCandidate?.resumeTitle || '岗位待确认'}</span>
+              <em>{departmentName || activeCandidate?.resumeDepartment || '部门待确认'}</em>
+              <div className="draft-node-meta">
+                <b>待确认</b>
+                {existingCandidateMatch && <b>疑似重复</b>}
+              </div>
+            </div>
+          ),
+        },
+      });
+      personDraftY += 148;
+    }
+
+    const orgPatch = pendingInterviewPatches.find((patch) => patch.type === 'orgUnit');
+    if (orgPatch) {
+      nodes.push({
+        id: `draft:${orgPatch.id}`,
+        position: { x: anchorX + 286, y: personDraftY },
+        draggable: false,
+        type: 'default',
+        data: {
+          label: (
+            <div className="flow-node draft-node draft-org-node">
+              <div className="flow-node-top">
+                <strong>{departmentName || '待确认部门'}</strong>
+                <small>待确认部门</small>
+              </div>
+              <span>{activeCandidate?.company || filters.company || '公司待确认'}</span>
+              <div className="draft-node-meta">
+                <b>等待挂载</b>
+              </div>
+            </div>
+          ),
+        },
+      });
+    }
+
+    return nodes;
+  }, [
+    activeCandidate,
+    activeInterview,
+    existingCandidateMatch,
+    filters.company,
+    graph.nodes,
+    interviewPreviewFields,
+    interviewSuggestions,
+    pendingInterviewPatches,
+    state.people,
+  ]);
+  const [nodes, setNodes] = useState<Node[]>([...graphNodes, ...draftGraphNodes]);
 
   const edges: Edge[] = useMemo(
-    () =>
-      graph.edges.map((edge) => {
+    () => {
+      const baseEdges = graph.edges.map((edge) => {
         const sourceNode = graph.nodes.find((node) => node.id === edge.source);
         const targetNode = graph.nodes.find((node) => node.id === edge.target);
         const targetSide = targetNode?.mindMapSide === 'left' || targetNode?.mindMapSide === 'right' ? targetNode.mindMapSide : undefined;
@@ -1047,11 +1441,55 @@ function OrgMapView({
           },
           className: ['org-edge', isTree ? 'mindmap-edge' : 'formal-edge'].join(' '),
         };
-      }),
-    [graph.edges, graph.nodes, isTree],
+      });
+
+      if (!activeInterview || pendingInterviewPatches.length === 0) return baseEdges;
+
+      const draftEdges: Edge[] = [];
+      const managerName = getInterviewFieldValue(interviewPreviewFields, 'managerName');
+      const personPatch = pendingInterviewPatches.find((patch) => patch.type === 'person');
+      const linePatch = pendingInterviewPatches.find((patch) => patch.type === 'reportingLine');
+      const departmentPatch = pendingInterviewPatches.find((patch) => patch.type === 'orgUnit');
+      const managerNode = managerName
+        ? graph.nodes.find((node) => normalizeName(node.label) === normalizeName(managerName))
+        : undefined;
+
+      if (personPatch && managerNode) {
+        draftEdges.push({
+          id: `draft-edge:${personPatch.id}`,
+          source: managerNode.id,
+          target: `draft:${personPatch.id}`,
+          type: isTree ? 'straight' : 'step',
+          style: {
+            stroke: '#4f7dff',
+            strokeWidth: isTree ? 1.35 : 1.6,
+            strokeDasharray: '7 5',
+          },
+          className: 'org-edge draft-edge',
+        });
+      }
+
+      if (departmentPatch && personPatch) {
+        draftEdges.push({
+          id: `draft-edge:${departmentPatch.id}`,
+          source: `draft:${departmentPatch.id}`,
+          target: `draft:${personPatch.id}`,
+          type: 'straight',
+          style: {
+            stroke: linePatch?.status === 'conflict' ? '#c26d00' : '#9aa8b7',
+            strokeWidth: 1.3,
+            strokeDasharray: '6 5',
+          },
+          className: 'org-edge draft-edge',
+        });
+      }
+
+      return [...baseEdges, ...draftEdges];
+    },
+    [activeInterview, graph.edges, graph.nodes, interviewPreviewFields, isTree, pendingInterviewPatches],
   );
 
-  useEffect(() => setNodes(graphNodes), [graphNodes]);
+  useEffect(() => setNodes([...graphNodes, ...draftGraphNodes]), [draftGraphNodes, graphNodes]);
   useEffect(() => {
     if (selectedNodeId && !graph.nodes.some((node) => node.id === selectedNodeId)) setSelectedNodeId('');
   }, [graph.nodes, selectedNodeId]);
@@ -1107,7 +1545,7 @@ function OrgMapView({
   };
 
   const saveNodePosition = (_: unknown, node: Node) => {
-    if (!editMode || String(node.id).startsWith('lane:')) return;
+    if (!editMode || String(node.id).startsWith('lane:') || String(node.id).startsWith('draft:')) return;
     setState((current) => {
       const next: AppState = structuredClone(current);
       const timestamp = new Date().toISOString();
@@ -1231,6 +1669,20 @@ function OrgMapView({
           />
         </label>
         <div className="canvas-actions primary-canvas-actions">
+          <button
+            type="button"
+            className={showCallMapping ? 'secondary-button active-filter' : 'secondary-button'}
+            onClick={() => {
+              if (showCallMapping) {
+                setShowCallMapping(false);
+                return;
+              }
+              openCallMappingPanel();
+            }}
+          >
+            <PhoneCall size={16} />
+            通话补图
+          </button>
           <button
             type="button"
             className={showFilters || activeFilterCount > 0 ? 'secondary-button active-filter' : 'secondary-button'}
@@ -1420,7 +1872,15 @@ function OrgMapView({
 
       {graph.truncated && <div className="inline-warning">当前筛选命中 {graph.totalBeforeLimit} 人，仅渲染前 {filters.visibleLimit} 个节点。</div>}
 
-      <div className={selectedGraphNode ? 'map-canvas-shell has-inspector' : 'map-canvas-shell'}>
+      <div
+        className={
+          showCallMapping
+            ? 'map-canvas-shell has-call-panel'
+            : selectedGraphNode
+              ? 'map-canvas-shell has-inspector'
+              : 'map-canvas-shell'
+        }
+      >
         <div className={isTree ? 'flow-surface mindmap-surface' : 'flow-surface formal-surface'}>
           <ReactFlow
             nodes={nodes}
@@ -1450,7 +1910,177 @@ function OrgMapView({
           </ReactFlow>
         </div>
 
-        {selectedGraphNode && (
+        {showCallMapping && (
+          <aside className="call-mapping-panel">
+            <div className="org-inspector-head">
+              <div>
+                <span>通话补图</span>
+                <h2>{activeCandidate?.name?.trim() || '新候选人'}</h2>
+                <p>把候选人口中的组织信息先转成待确认补丁，再并入正式图。</p>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setShowCallMapping(false)} aria-label="关闭通话补图">
+                <X size={16} />
+              </button>
+            </div>
+
+            {existingCandidateMatch && (
+              <div className="interview-inline-alert">
+                <AlertTriangle size={15} />
+                <span>图中已存在同名人员：{existingCandidateMatch.name}，确认前请先检查是否重复。</span>
+              </div>
+            )}
+
+            {activeCandidate && activeInterview ? (
+              <>
+                <div className="interview-section">
+                  <h3>候选人</h3>
+                  <div className="candidate-fields">
+                    <Field label="姓名" value={activeCandidate.name} onChange={(value) => updateCandidateProfileField('name', value)} />
+                    <Field label="公司" value={activeCandidate.company ?? ''} onChange={(value) => updateCandidateProfileField('company', value)} />
+                    <Field
+                      label="简历岗位"
+                      value={activeCandidate.resumeTitle ?? ''}
+                      onChange={(value) => updateCandidateProfileField('resumeTitle', value)}
+                    />
+                    <Field
+                      label="简历部门"
+                      value={activeCandidate.resumeDepartment ?? ''}
+                      onChange={(value) => updateCandidateProfileField('resumeDepartment', value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="interview-section">
+                  <h3>通话记录</h3>
+                  <div className="candidate-fields">
+                    <Field
+                      label="当前岗位"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'currentTitle')}
+                      onChange={(value) => updateInterviewFieldValue('currentTitle', value)}
+                    />
+                    <Field
+                      label="当前部门"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'currentDepartment')}
+                      onChange={(value) => updateInterviewFieldValue('currentDepartment', value)}
+                    />
+                    <Field
+                      label="直属上级"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'managerName')}
+                      onChange={(value) => updateInterviewFieldValue('managerName', value)}
+                    />
+                    <Field
+                      label="部门一号位"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'departmentHead')}
+                      onChange={(value) => updateInterviewFieldValue('departmentHead', value)}
+                    />
+                    <Field
+                      label="团队规模"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'teamSize')}
+                      onChange={(value) => updateInterviewFieldValue('teamSize', value)}
+                    />
+                    <Field
+                      label="平级团队"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'peerTeams')}
+                      onChange={(value) => updateInterviewFieldValue('peerTeams', value)}
+                    />
+                    <Field
+                      label="下属情况"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'directReports')}
+                      onChange={(value) => updateInterviewFieldValue('directReports', value)}
+                    />
+                    <Field
+                      label="近期变化"
+                      value={getInterviewFieldValue(interviewPreviewFields, 'recentChanges')}
+                      onChange={(value) => updateInterviewFieldValue('recentChanges', value)}
+                    />
+                  </div>
+                  <label className="field wide textarea-field">
+                    <span>快捷输入 / 原始备注</span>
+                    <textarea
+                      rows={6}
+                      value={activeInterview.rawNotes}
+                      placeholder={'上级：张三\n部门：地图渲染引擎部\n岗位：高级地图算法专家\n团队：12人\n变化：Q1裁员约20%'}
+                      onChange={(event) => updateInterviewRawNotes(event.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="interview-section">
+                  <h3>挂载建议</h3>
+                  {interviewSuggestions.length > 0 ? (
+                    <div className="mount-suggestion-list">
+                      {interviewSuggestions.map((suggestion, index) => (
+                        <div key={`${suggestion.label}-${index}`} className="mount-suggestion-item">
+                          <strong>{suggestion.label}</strong>
+                          <span>{suggestion.reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="interview-empty">先补充部门、上级或岗位信息，系统才能推荐挂载位置。</p>
+                  )}
+                </div>
+
+                <div className="interview-section">
+                  <h3>待确认变更</h3>
+                  {interviewPatches.length > 0 ? (
+                    <div className="patch-list">
+                      {interviewPatches.map((patch) => (
+                        <div key={patch.id} className={`patch-item patch-${patch.status}`}>
+                          <div className="patch-item-copy">
+                            <strong>{mapPatchTypeLabel(patch.type)}</strong>
+                            <span>{mapPatchSummary(patch)}</span>
+                            <span>{patch.status === 'conflict' ? '与现有图冲突，建议人工复核' : '待确认并入正式图'}</span>
+                          </div>
+                          <div className="patch-actions">
+                            {patch.status !== 'accepted' && (
+                              <button type="button" className="secondary-button" onClick={() => updatePatchStatus(patch.id, 'accepted')}>
+                                接受
+                              </button>
+                            )}
+                            {patch.status !== 'rejected' && (
+                              <button type="button" className="secondary-button" onClick={() => updatePatchStatus(patch.id, 'rejected')}>
+                                忽略
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="interview-empty">还没有待确认补丁，先生成补图建议。</p>
+                  )}
+                </div>
+
+                <div className="interview-actions">
+                  <button type="button" className="secondary-button" onClick={saveInterviewDraft}>
+                    <Save size={16} />
+                    保存草稿
+                  </button>
+                  <button type="button" className="secondary-button" onClick={generateInterviewPatches}>
+                    <Users size={16} />
+                    生成补图建议
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={acceptAllInterviewPatches}
+                    disabled={pendingInterviewPatches.length === 0}
+                  >
+                    <Check size={16} />
+                    确认并入图
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="interview-empty-state">
+                <p>还没有通话草稿，点击工具栏里的“通话补图”后会自动为你创建一个。</p>
+              </div>
+            )}
+          </aside>
+        )}
+
+        {!showCallMapping && selectedGraphNode && (
           <aside className="org-inspector">
             <div className="org-inspector-head">
               <div>
