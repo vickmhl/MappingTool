@@ -3,20 +3,26 @@ import { createMapBusinessDemoState } from '../data/seed';
 import { calculateOrgInsights } from './insights';
 import { buildOrgGraph } from './graph';
 
+const makeFilters = (overrides: Partial<Parameters<typeof buildOrgGraph>[1]> = {}) => ({
+  company: '',
+  search: '',
+  focusPersonName: '',
+  minConfidence: 0.72,
+  visibleLimit: 28,
+  maxDepth: 2,
+  onlyTalent: false,
+  onlyRecentChanges: false,
+  onlyManagers: false,
+  ...overrides,
+});
+
 describe('org graph performance', () => {
   it('keeps formal org chart rendering bounded and report-ready at 5,000+ people scale', () => {
     const state = createMapBusinessDemoState();
     state.project.settings.orgChartMode = 'formal';
 
     const graphStart = performance.now();
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.75,
-      visibleLimit: 300,
-      maxDepth: 3,
-    });
+    const graph = buildOrgGraph(state, makeFilters({ minConfidence: 0.75, visibleLimit: 300, maxDepth: 3 }));
     const graphDuration = performance.now() - graphStart;
 
     const insightStart = performance.now();
@@ -37,14 +43,7 @@ describe('org graph performance', () => {
     state.project.settings.orgChartMode = 'formal';
     state.project.settings.activeCanvasView = 'mindmap';
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.72,
-      visibleLimit: 24,
-      maxDepth: 1,
-    });
+    const graph = buildOrgGraph(state, makeFilters({ visibleLimit: 24, maxDepth: 1 }));
 
     const minX = Math.min(...graph.nodes.map((node) => node.x));
     const maxX = Math.max(...graph.nodes.map((node) => node.x));
@@ -58,14 +57,7 @@ describe('org graph performance', () => {
     state.project.settings.orgChartMode = 'formal';
     state.project.settings.activeCanvasView = 'detail';
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.55,
-      visibleLimit: 42,
-      maxDepth: 2,
-    });
+    const graph = buildOrgGraph(state, makeFilters({ minConfidence: 0.55, visibleLimit: 42, maxDepth: 2 }));
 
     const sideNodes = graph.nodes.filter(
       (node) => (node.mindMapSide === 'left' || node.mindMapSide === 'right') && node.depth >= 1,
@@ -86,14 +78,7 @@ describe('org graph performance', () => {
     state.project.settings.orgChartMode = 'formal';
     state.project.settings.activeCanvasView = 'executive';
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.72,
-      visibleLimit: 28,
-      maxDepth: 2,
-    });
+    const graph = buildOrgGraph(state, makeFilters());
 
     const minX = Math.min(...graph.nodes.map((node) => node.x));
     const maxX = Math.max(...graph.nodes.map((node) => node.x));
@@ -107,14 +92,7 @@ describe('org graph performance', () => {
     state.project.settings.orgChartMode = 'formal';
     state.project.settings.activeCanvasView = 'recruiting';
 
-    const graph = buildOrgGraph(state, {
-      company: '',
-      search: '',
-      focusPersonName: '',
-      minConfidence: 0.55,
-      visibleLimit: 48,
-      maxDepth: 2,
-    });
+    const graph = buildOrgGraph(state, makeFilters({ minConfidence: 0.55, visibleLimit: 48, maxDepth: 2 }));
 
     const minX = Math.min(...graph.nodes.map((node) => node.x));
     const maxX = Math.max(...graph.nodes.map((node) => node.x));
@@ -125,5 +103,27 @@ describe('org graph performance', () => {
     expect(l1Nodes.length).toBeGreaterThanOrEqual(8);
     expect(l2Nodes.length).toBeGreaterThanOrEqual(20);
     expect(new Set(l2Nodes.map((node) => node.y)).size).toBeGreaterThan(2);
+  });
+
+  it('does not silently cap search results at the manual visible limit', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'recruiting';
+
+    const graph = buildOrgGraph(state, makeFilters({ minConfidence: 0.55, visibleLimit: 10, maxDepth: 2, search: '地图' }));
+
+    expect(graph.nodes.length).toBeGreaterThan(10);
+    expect(graph.renderedLimit).toBeGreaterThan(10);
+  });
+
+  it('makes manager-only filters materially reduce the result set to people with teams', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'recruiting';
+
+    const graph = buildOrgGraph(state, makeFilters({ minConfidence: 0.55, visibleLimit: 60, maxDepth: 2, onlyManagers: true }));
+
+    expect(graph.nodes.length).toBeGreaterThan(0);
+    expect(graph.nodes.every((node) => node.span > 0)).toBe(true);
   });
 });
