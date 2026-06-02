@@ -81,6 +81,7 @@ export interface OrgGraph {
   diagnostics: OrgGraphDiagnostics;
   truncated: boolean;
   totalBeforeLimit: number;
+  renderedLimit: number;
 }
 
 function personMatches(person: Person, filters: OrgMapFilters): boolean {
@@ -91,6 +92,15 @@ function personMatches(person: Person, filters: OrgMapFilters): boolean {
   return [person.name, person.company, person.currentTitle, person.currentDepartment, ...person.aliases]
     .filter(Boolean)
     .some((value) => normalizeName(value ?? '').includes(search));
+}
+
+function isTalentPerson(person: Person): boolean {
+  const tagsText = person.tags.join(' ');
+  const titleText = person.currentTitle ?? '';
+  return (
+    /关键人才|重点人才|高潜|核心人才/i.test(tagsText) ||
+    /专家|架构|HRBP|hrbp|顾问|总监|总经理|副总裁|VP|vp/i.test(titleText)
+  );
 }
 
 function exactOrFuzzyName(name: string, people: Person[]): string {
@@ -337,6 +347,15 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     if (!depthByName.has(name)) depthByName.set(name, 0);
   }
 
+  const changeCountByName = new Map<string, number>();
+  for (const event of state.changeEvents) {
+    if (!event.personName) continue;
+    const date = new Date(event.date ?? event.createdAt).getTime();
+    if (!Number.isFinite(date) || Date.now() - date > 90 * 86_400_000) continue;
+    const name = normalizeName(event.personName);
+    changeCountByName.set(name, (changeCountByName.get(name) ?? 0) + 1);
+  }
+
   const focusAncestors = focusName ? collectAncestors(focusName, managerBySubordinate) : [];
   const focusDescendants = focusName ? collectDescendants(focusName, childrenByManager) : new Set<string>();
   const focusManager = focusName ? managerBySubordinate.get(focusName) : undefined;
@@ -344,7 +363,20 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
   const focusSet = new Set<string>([...focusAncestors, ...focusDescendants, ...focusSiblings]);
   if (focusName) focusSet.add(focusName);
 
-  const useReportDefault = isReportView && !focusName && !filters.search.trim();
+  const passesBusinessFilters = (person: Person, normalizedName: string): boolean => {
+    if (filters.onlyManagers && (directSpanAll.get(normalizedName) ?? 0) === 0) return false;
+    if (filters.onlyRecentChanges && (changeCountByName.get(normalizedName) ?? 0) === 0) return false;
+    if (filters.onlyTalent && !isTalentPerson(person)) return false;
+    return true;
+  };
+
+  const useReportDefault =
+    isReportView &&
+    !focusName &&
+    !filters.search.trim() &&
+    !filters.onlyTalent &&
+    !filters.onlyRecentChanges &&
+    !filters.onlyManagers;
   const reportVisibleNames = useReportDefault
     ? buildReportVisibleNames(
         candidatePeople,
@@ -363,7 +395,8 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
         const name = normalizeName(person.name);
         if (focusName && !focusSet.has(name)) return false;
         if (!focusName && !personMatches(person, filters)) return false;
-        return true;
+        if (focusName && (name === focusName || focusAncestors.includes(name))) return true;
+        return passesBusinessFilters(person, name);
       });
   const focusDepth = focusName ? depthByName.get(focusName) ?? 0 : 0;
   const depthLimitedPeople = useReportDefault
@@ -394,7 +427,11 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
         a.name.localeCompare(b.name, 'zh-Hans-CN')
       );
     });
-  const limitedPeople = orderedPeople.slice(0, filters.visibleLimit);
+  const precisionFilterActive = Boolean(focusName || filters.search.trim());
+  const effectiveVisibleLimit = precisionFilterActive
+    ? Math.max(filters.visibleLimit, Math.min(depthLimitedPeople.length, 180))
+    : filters.visibleLimit;
+  const limitedPeople = orderedPeople.slice(0, effectiveVisibleLimit);
   const visibleNameSet = new Set(limitedPeople.map((person) => normalizeName(person.name)));
   const visibleLines = eligibleLines.filter(
     (line) =>
@@ -406,15 +443,6 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
     const manager = normalizeName(line.managerName);
     const subordinate = normalizeName(line.subordinateName);
     visibleChildrenByManager.set(manager, [...(visibleChildrenByManager.get(manager) ?? []), subordinate]);
-  }
-
-  const changeCountByName = new Map<string, number>();
-  for (const event of state.changeEvents) {
-    if (!event.personName) continue;
-    const date = new Date(event.date ?? event.createdAt).getTime();
-    if (!Number.isFinite(date) || Date.now() - date > 90 * 86_400_000) continue;
-    const name = normalizeName(event.personName);
-    changeCountByName.set(name, (changeCountByName.get(name) ?? 0) + 1);
   }
 
   const positions: Map<string, { x: number; y: number; side?: 'root' | 'left' | 'right' }> = mode === 'formal'
@@ -506,8 +534,9 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
       weakRelationCount: edges.filter((edge) => edge.confidence < 0.75).length,
       wideSpanManagerCount: nodes.filter((node) => node.span >= 12).length,
     },
-    truncated: depthLimitedPeople.length > filters.visibleLimit,
+    truncated: depthLimitedPeople.length > effectiveVisibleLimit,
     totalBeforeLimit: depthLimitedPeople.length,
+    renderedLimit: effectiveVisibleLimit,
   };
 }
 
