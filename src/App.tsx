@@ -1736,6 +1736,16 @@ function OrgMapView({
               </button>
             </>
           )}
+          {businessMode === 'recruiting' && filters.focusPersonName.trim() && (
+            <button
+              type="button"
+              className="secondary-button active-filter"
+              onClick={() => setFilters({ ...filters, focusPersonName: '' })}
+            >
+              <RotateCcw size={16} />
+              返回全图
+            </button>
+          )}
           <button type="button" className="secondary-button" onClick={() => flowInstance?.fitView({ duration: 260 })}>
             <Maximize2 size={16} />
             适配画布
@@ -1908,13 +1918,14 @@ function OrgMapView({
             onInit={setFlowInstance}
             onNodesChange={onNodesChange}
             onNodeDragStop={saveNodePosition}
-            onPaneClick={() => setSelectedNodeId('')}
+            onPaneClick={() => {
+              setSelectedNodeId('');
+              if (businessMode === 'recruiting' && filters.focusPersonName.trim()) {
+                setFilters({ ...filters, focusPersonName: '' });
+              }
+            }}
             onNodeClick={(_, node) => {
               setSelectedNodeId(node.id);
-              const graphNode = graph.nodes.find((item) => item.id === node.id);
-              if (graphNode && businessMode === 'recruiting' && !editMode) {
-                setFilters({ ...filters, focusPersonName: graphNode.label });
-              }
             }}
           >
             {businessMode === 'recruiting' && <MiniMap pannable zoomable />}
