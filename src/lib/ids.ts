@@ -11,7 +11,10 @@ export function createId(prefix: string): string {
 }
 
 export function normalizeName(value: string): string {
-  return value.trim().replace(/\s+/g, '').replace(/[，。；:：、]/g, '');
+  return value
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[，。、；：:()（）【】[\]"'“”‘’·\-]/g, '');
 }
 
 export function clamp(value: number, min: number, max: number): number {

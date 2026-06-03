@@ -1,4 +1,3 @@
-import pptxgen from 'pptxgenjs';
 import type { AppState, OrgChartExportFormat, OrgMapFilters, Person } from '../types';
 import { buildOrgGraph } from './graph';
 import { buildExecutiveNarrative } from './insights';
@@ -566,6 +565,7 @@ export async function exportReportPptx(
   filters: OrgMapFilters,
   fileName = `${state.project.name}.pptx`,
 ): Promise<void> {
+  const { default: PptxGenJS } = await import('pptxgenjs');
   const anonymize = shouldMaskNames(state);
   const narrative = buildExecutiveNarrative(state);
   const orgModel = buildOrgHierarchyModel(state);
@@ -581,7 +581,7 @@ export async function exportReportPptx(
           ? '招聘模式 · 树状图'
           : '招聘模式 · 常规架构图';
   const pendingCount = state.candidates.filter((candidate) => candidate.status === 'pending').length;
-  const pptx = new pptxgen();
+  const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';
   pptx.author = '竞对组织架构 Mapping 工具';
   pptx.subject = '组织架构 mapping 汇报';
@@ -1083,7 +1083,7 @@ export async function exportReportPptx(
 
 function slideColumn(
   slide: any,
-  pptx: pptxgen,
+  pptx: any,
   deck: Record<string, string>,
   parent: ReportOrgCard,
   children: ReportOrgCard[],

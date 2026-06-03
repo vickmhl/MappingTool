@@ -1,4 +1,3 @@
-import JSZip from 'jszip';
 import type { AppState } from '../types';
 
 const PACKAGE_VERSION = 1;
@@ -60,6 +59,7 @@ export async function exportEncryptedProjectPackage(
   state: AppState,
   password: string,
 ): Promise<Blob> {
+  const { default: JSZip } = await import('jszip');
   ensurePassword(password);
   const salt = randomBytes(16);
   const iv = randomBytes(12);
@@ -96,6 +96,7 @@ export async function exportEncryptedProjectPackage(
 }
 
 export async function importEncryptedProjectPackage(file: File, password: string): Promise<AppState> {
+  const { default: JSZip } = await import('jszip');
   ensurePassword(password);
   const zip = await JSZip.loadAsync(await readBlobAsArrayBuffer(file));
   const manifest = JSON.parse((await zip.file('manifest.json')?.async('text')) ?? '{}') as {

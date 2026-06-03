@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertTriangle,
   BriefcaseBusiness,
   Check,
@@ -36,10 +36,9 @@ import {
 } from '@xyflow/react';
 import { createEmptyState, createMapBusinessDemoState, ensureStateShape } from './data/seed';
 import { buildOrgGraph, layoutIdForCanvasView } from './lib/graph';
-import { importSourceFile } from './lib/importer';
 import { clearPersistedState, loadPersistedState, persistState } from './lib/idb';
 import { addImportResult, updateCandidateStatus } from './lib/merge';
-import { exportEncryptedProjectPackage, importEncryptedProjectPackage } from './lib/projectPackage';
+import { buildReviewQueueBuckets, buildReviewSourceAlerts, candidateKindCounts, type ReviewQueueKey } from './lib/reviewQueue';
 import { downloadBlob, exportOrgGraphPng, exportReportPptx } from './lib/exporters';
 import { createId, normalizeName } from './lib/ids';
 import {
@@ -296,7 +295,7 @@ function App() {
           visibleLimit: hydrated.project.settings.defaultVisibleNodeLimit,
         }));
       })
-      .catch((error) => setToast(`本地库读取失败：${error instanceof Error ? error.message : String(error)}`))
+      .catch((error) => setToast(`本地缓存读取失败：${error instanceof Error ? error.message : String(error)}`))
       .finally(() => setLoaded(true));
   }, []);
 
@@ -320,13 +319,14 @@ function App() {
   async function handleFiles(files: FileList | null): Promise<void> {
     if (!files?.length) return;
     let candidateCount = 0;
+    const { importSourceFile } = await import('./lib/importer');
 
     for (const file of [...files]) {
       try {
         const result = await importSourceFile(file, { enableOcr });
         candidateCount += result.candidates.length;
         setState((current) =>
-          appendAudit(addImportResult(current, result), 'import', `导入 ${file.name}`, {
+          appendAudit(addImportResult(current, result), 'import', `瀵煎叆 ${file.name}`, {
             entityCount: result.candidates.length,
             view: 'import',
             sourceName: file.name,
@@ -343,7 +343,7 @@ function App() {
       setOpenManualRepair(false);
       setActiveView('review');
     } else {
-      setToast(enableOcr ? '未识别到候选，请手动补充' : '未识别到候选，可开启 OCR 后重试，或手动补充');
+      setToast(enableOcr ? '未识别到候选，请手动补充。' : '未识别到候选，可开启 OCR 后重试，或手动补充。');
       setOpenManualRepair(true);
       setActiveView('map');
     }
@@ -361,7 +361,7 @@ function App() {
     setFilters({ ...defaultFilters, ...canvasPresets.executive.filters });
     setOpenManualRepair(false);
     setActiveView('map');
-    setToast('已载入虚拟演示Demo');
+    setToast('已载入虚拟演示 Demo');
   }
 
   function decideCandidates(candidateIds: string[], status: 'accepted' | 'rejected'): void {
@@ -396,8 +396,15 @@ function App() {
     });
   }
 
+  function openManualRepairFromReview(): void {
+    setOpenManualRepair(true);
+    setActiveView('map');
+    setToast('请在组织图页补录截图中的人员和汇报线');
+  }
+
   async function exportPackage(): Promise<void> {
     try {
+      const { exportEncryptedProjectPackage } = await import('./lib/projectPackage');
       const blob = await exportEncryptedProjectPackage(state, password);
       downloadBlob(blob, `${state.project.name}.mapping.zip`);
       setState((current) => appendAudit(current, 'export', '导出加密项目包', { view: 'export' }));
@@ -410,6 +417,7 @@ function App() {
   async function importPackage(file: File | undefined): Promise<void> {
     if (!file) return;
     try {
+      const { importEncryptedProjectPackage } = await import('./lib/projectPackage');
       const imported = ensureStateShape(await importEncryptedProjectPackage(file, password));
       setState(appendAudit(imported, 'project-imported', `导入项目包 ${file.name}`, { view: 'export', sourceName: file.name }));
       setActiveView('map');
@@ -436,7 +444,7 @@ function App() {
   async function exportPptx(): Promise<void> {
     try {
       await exportReportPptx(state, filters);
-      setState((current) => appendAudit(current, 'export', '导出 PPTX', { entityCount: graph.nodes.length, view: 'export' }));
+      setState((current) => appendAudit(current, 'export', '瀵煎嚭 PPTX', { entityCount: graph.nodes.length, view: 'export' }));
       setToast('PPTX 已生成');
     } catch (error) {
       setToast(error instanceof Error ? error.message : String(error));
@@ -508,9 +516,13 @@ function App() {
         {activeView === 'review' && (
           <ReviewView
             candidates={pendingCandidates}
+            sources={state.sources}
+            roleAssignments={state.roleAssignments}
+            reportingLines={state.reportingLines}
             onAccept={(ids) => decideCandidates(ids, 'accepted')}
             onReject={(ids) => decideCandidates(ids, 'rejected')}
             onFieldChange={updateCandidatePayload}
+            onOpenManualRepair={openManualRepairFromReview}
           />
         )}
 
@@ -587,7 +599,7 @@ function ImportView({
           <div className="entry-icon">
             <Network size={24} />
           </div>
-          <h2>虚拟演示Demo</h2>
+          <h2>虚拟演示 Demo</h2>
           <button type="button" className="primary-button demo-entry-button" onClick={loadMapBusinessDemo}>
             打开演示组织图
           </button>
@@ -599,25 +611,55 @@ function ImportView({
 
 function ReviewView({
   candidates,
+  sources,
+  roleAssignments,
+  reportingLines,
   onAccept,
   onReject,
   onFieldChange,
+  onOpenManualRepair,
 }: {
   candidates: CandidateRecord<AnyCandidatePayload>[];
+  sources: AppState['sources'];
+  roleAssignments: AppState['roleAssignments'];
+  reportingLines: AppState['reportingLines'];
   onAccept: (ids: string[]) => void;
   onReject: (ids: string[]) => void;
   onFieldChange: (candidateId: string, field: string, value: string) => void;
+  onOpenManualRepair: () => void;
 }) {
+  const [queueFilter, setQueueFilter] = useState<ReviewQueueKey>('priority');
   const [kindFilter, setKindFilter] = useState<CandidateKind | 'all'>('all');
-  const allIds = candidates.map((candidate) => candidate.id);
-  const visibleCandidates = candidates
+  const sourceAlerts = buildReviewSourceAlerts(sources);
+  const queueBuckets = buildReviewQueueBuckets(candidates, sources, roleAssignments, reportingLines);
+  const candidateIdsByQueue = new Map(queueBuckets.map((bucket) => [bucket.key, bucket.candidateIds]));
+  const counts = candidateKindCounts(candidates).map((item) => ({
+    ...item,
+    label: kindLabel[item.kind],
+  }));
+  const activeQueue =
+    queueBuckets.find((bucket) => bucket.key === queueFilter && (bucket.count > 0 || bucket.key === 'all')) ??
+    queueBuckets.find((bucket) => bucket.key !== 'all' && bucket.count > 0) ??
+    queueBuckets.find((bucket) => bucket.key === 'all')!;
+  const candidateMap = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const sourceMap = new Map(sources.map((source) => [source.id, source]));
+  const queueCandidates = (candidateIdsByQueue.get(activeQueue.key) ?? [])
+    .map((candidateId) => candidateMap.get(candidateId))
+    .filter((candidate): candidate is CandidateRecord<AnyCandidatePayload> => Boolean(candidate));
+  const queueSourceTasks = (activeQueue.sourceIds ?? [])
+    .map((sourceId) => sourceMap.get(sourceId))
+    .filter((source): source is AppState['sources'][number] => Boolean(source));
+  const visibleCandidates = queueCandidates
     .filter((candidate) => kindFilter === 'all' || candidate.kind === kindFilter)
     .slice(0, 160);
-  const counts = (Object.keys(kindLabel) as CandidateKind[]).map((kind) => ({
-    kind,
-    label: kindLabel[kind],
-    count: candidates.filter((candidate) => candidate.kind === kind).length,
-  }));
+  const visibleIds = visibleCandidates.map((candidate) => candidate.id);
+  const allIds = candidates.map((candidate) => candidate.id);
+  const queueNoteById = new Map<ReviewQueueKey, { label: string; tone: string }>([
+    ['priority', { label: '优先确认', tone: 'queue-priority' }],
+    ['review', { label: '待复核', tone: 'queue-review' }],
+    ['manual', { label: '截图待补录', tone: 'queue-manual' }],
+    ['all', { label: '全部候选', tone: 'queue-all' }],
+  ]);
 
   return (
     <section className="view-stack">
@@ -626,6 +668,38 @@ function ReviewView({
           <h2>确认识别结果</h2>
           <span className="small-badge">{candidates.length}</span>
         </div>
+
+        {sourceAlerts.length > 0 && (
+          <div className="review-alert-list">
+            {sourceAlerts.map((alert) => (
+              <article className={`review-alert-card ${alert.severity}`} key={alert.id}>
+                <div className="review-alert-title">
+                  <strong>{alert.title}</strong>
+                  <span className={`small-badge ${alert.severity === 'manual' ? 'warning' : ''}`}>{alert.fileName}</span>
+                </div>
+                <p>{alert.message}</p>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <div className="review-queue-grid">
+          {queueBuckets
+            .filter((bucket) => bucket.key !== 'all')
+            .map((bucket) => (
+              <button
+                key={bucket.key}
+                type="button"
+                className={activeQueue.key === bucket.key ? 'active' : ''}
+                onClick={() => setQueueFilter(bucket.key)}
+              >
+                <strong>{bucket.count}</strong>
+                <span>{bucket.label}</span>
+                <small>{bucket.description}</small>
+              </button>
+            ))}
+        </div>
+
         <div className="recognition-grid">
           {counts.map((item) => (
             <button
@@ -643,47 +717,90 @@ function ReviewView({
 
       <div className="toolbar">
         <button type="button" className="secondary-button" onClick={() => setKindFilter('all')}>
-          全部
+          全部类型
         </button>
-        <button type="button" className="primary-button" onClick={() => onAccept(allIds)} disabled={!allIds.length}>
+        <span className="review-toolbar-note">
+          当前队列：{activeQueue.label}，共 {activeQueue.count} 项，当前显示 {visibleCandidates.length} 条候选
+          {queueSourceTasks.length > 0 ? `，另有 ${queueSourceTasks.length} 份截图待补录` : ''}
+        </span>
+        <button type="button" className="primary-button" onClick={() => onAccept(visibleIds)} disabled={!visibleIds.length}>
           <Check size={16} />
-          全部确认
+          确认当前
         </button>
-        <button type="button" className="secondary-button" onClick={() => onReject(allIds)} disabled={!allIds.length}>
+        <button type="button" className="secondary-button" onClick={() => onReject(visibleIds)} disabled={!visibleIds.length}>
           <X size={16} />
-          全部忽略
+          忽略当前
+        </button>
+        <button type="button" className="secondary-button" onClick={() => onAccept(allIds)} disabled={!allIds.length}>
+          一键确认全部
         </button>
       </div>
 
       <div className="candidate-list">
-        {visibleCandidates.map((candidate) => (
-          <article className="candidate-card" key={candidate.id}>
+        {queueSourceTasks.map((source) => (
+          <article className="candidate-card queue-manual source-task-card" key={source.id}>
             <div className="candidate-main">
               <div className="candidate-title">
-                <span className="kind-pill">{kindLabel[candidate.kind]}</span>
-                <strong>{candidateSummary(candidate)}</strong>
-                <em>{Math.round(candidate.confidence * 100)}%</em>
+                <span className="kind-pill">截图资料</span>
+                <span className="queue-pill queue-manual">待补录</span>
+                <strong>{source.fileName}</strong>
+                <em>{source.totalChunks > 0 ? `${source.totalChunks} 段文本` : '未抽到文本'}</em>
               </div>
-              <CandidateEditor candidate={candidate} onFieldChange={onFieldChange} />
-              <blockquote>{candidate.evidenceText}</blockquote>
-              <small>{candidate.sourceName}</small>
+              <p className="source-task-body">
+                这份资料已经被识别成截图或图片来源，但当前没有可直接确认的候选。请去组织图页补录人员、岗位和汇报线。
+              </p>
+              {source.warnings?.length ? (
+                <ul className="source-task-warnings">
+                  {source.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
             <div className="candidate-actions">
-              <button type="button" className="primary-button" onClick={() => onAccept([candidate.id])}>
-                确认
-              </button>
-              <button type="button" className="secondary-button" onClick={() => onReject([candidate.id])}>
-                忽略
+              <button type="button" className="primary-button" onClick={onOpenManualRepair}>
+                去组织图补录
               </button>
             </div>
           </article>
         ))}
-        {visibleCandidates.length === 0 && <EmptyState title="没有待确认候选" body="上传资料后会在这里确认人员、组织和汇报线。" />}
+        {visibleCandidates.map((candidate) => {
+          const queueKey =
+            (queueBuckets.find((bucket) => bucket.key !== 'all' && bucket.candidateIds.includes(candidate.id))?.key as ReviewQueueKey | undefined) ??
+            'review';
+          const note = queueNoteById.get(queueKey) ?? queueNoteById.get('review')!;
+
+          return (
+            <article className={`candidate-card ${note.tone}`} key={candidate.id}>
+              <div className="candidate-main">
+                <div className="candidate-title">
+                  <span className="kind-pill">{kindLabel[candidate.kind]}</span>
+                  <span className={`queue-pill ${note.tone}`}>{note.label}</span>
+                  <strong>{candidateSummary(candidate)}</strong>
+                  <em>{Math.round(candidate.confidence * 100)}%</em>
+                </div>
+                <CandidateEditor candidate={candidate} onFieldChange={onFieldChange} />
+                <blockquote>{candidate.evidenceText}</blockquote>
+                <small>{candidate.sourceName}</small>
+              </div>
+              <div className="candidate-actions">
+                <button type="button" className="primary-button" onClick={() => onAccept([candidate.id])}>
+                  确认
+                </button>
+                <button type="button" className="secondary-button" onClick={() => onReject([candidate.id])}>
+                  忽略
+                </button>
+              </div>
+            </article>
+          );
+        })}
+        {visibleCandidates.length === 0 && queueSourceTasks.length === 0 && (
+          <EmptyState title="当前队列没有待确认候选" body="切换队列或继续上传资料后，这里会显示人员、组织和汇报线。" />
+        )}
       </div>
     </section>
   );
 }
-
 function CandidateEditor({
   candidate,
   onFieldChange,
@@ -1123,7 +1240,7 @@ function OrgMapView({
       };
       if (isVirtualDemoState(next)) persistDemoCanvasLayouts(next.canvasLayouts);
       next.project.updatedAt = timestamp;
-      return appendAudit(next, 'canvas-layout-saved', `保存${canvasViewLabel(activeView)}画布`, {
+      return appendAudit(next, 'canvas-layout-saved', `保存 ${canvasViewLabel(activeView)} 画布`, {
         entityCount: Object.keys(visiblePositions).length,
         view: 'map',
       });
@@ -1138,7 +1255,7 @@ function OrgMapView({
       next.canvasLayouts = layouts;
       if (isVirtualDemoState(next)) persistDemoCanvasLayouts(next.canvasLayouts);
       next.project.updatedAt = new Date().toISOString();
-      return appendAudit(next, 'canvas-layout-reset', `重置${canvasViewLabel(activeView)}画布`, { view: 'map' });
+      return appendAudit(next, 'canvas-layout-reset', `重置 ${canvasViewLabel(activeView)} 画布`, { view: 'map' });
     });
   };
 
@@ -1638,7 +1755,7 @@ function OrgMapView({
             </button>
             <button type="button" className="secondary-button" onClick={loadMapBusinessDemo}>
               <Network size={16} />
-              虚拟演示Demo
+              虚拟演示 Demo
             </button>
           </div>
         </section>
@@ -1901,7 +2018,7 @@ function OrgMapView({
         <section className="tool-panel manual-repair-panel">
           <div className="manual-repair-grid">
             <div>
-              <h3>新增/更新人员</h3>
+              <h3>新增 / 更新人员</h3>
               <div className="candidate-fields">
                 <Field label="姓名" value={manualPerson.name} onChange={(value) => setManualPerson((current) => ({ ...current, name: value }))} />
                 <Field label="岗位" value={manualPerson.title} onChange={(value) => setManualPerson((current) => ({ ...current, title: value }))} />
@@ -1992,7 +2109,7 @@ function OrgMapView({
                 <div className="interview-section">
                   <h3>候选人</h3>
                   <div className="candidate-fields call-mapping-grid">
-                    <Field label="姓名" value={activeCandidate.name} onChange={(value) => updateCandidateProfileField('name', value)} />
+                    <Field label="濮撳悕" value={activeCandidate.name} onChange={(value) => updateCandidateProfileField('name', value)} />
                     <Field label="公司" value={activeCandidate.company ?? ''} onChange={(value) => updateCandidateProfileField('company', value)} />
                     <Field
                       label="简历岗位"
@@ -2011,7 +2128,7 @@ function OrgMapView({
                   <h3>通话记录</h3>
                   <div className="candidate-fields call-mapping-grid">
                     <Field
-                      label="当前岗位"
+                      label="褰撳墠宀椾綅"
                       value={getInterviewFieldValue(interviewPreviewFields, 'currentTitle')}
                       onChange={(value) => updateInterviewFieldValue('currentTitle', value)}
                     />
@@ -2056,7 +2173,7 @@ function OrgMapView({
                     <textarea
                       rows={6}
                       value={activeInterview.rawNotes}
-                      placeholder={'上级：张三\n部门：地图渲染引擎部\n岗位：高级地图算法专家\n团队：12人\n变化：Q1裁员约20%'}
+                      placeholder={'上级：张三\n部门：地图渲染引擎部\n岗位：高级地图算法专家\n团队：12人\n变化：Q1 裁员约 20%'}
                       onChange={(event) => updateInterviewRawNotes(event.target.value)}
                     />
                   </label>
@@ -2118,7 +2235,7 @@ function OrgMapView({
                             )}
                             {patch.status !== 'rejected' && (
                               <button type="button" className="secondary-button" onClick={() => updatePatchStatus(patch.id, 'rejected')}>
-                                忽略
+                                蹇界暐
                               </button>
                             )}
                           </div>
@@ -2300,10 +2417,10 @@ function ExportView({
             {previewImage ? (
               <>
                 <img src={previewImage} alt="导出预览" className="export-preview-image" />
-                <p>当前模式、筛选条件和手动布局会直接进入导出结果。</p>
+                <p>当前模式、筛选条件和手动画布布局会直接进入导出结果。</p>
               </>
             ) : (
-              <p>暂无可导出的组织图，请先上传资料或打开虚拟演示Demo。</p>
+              <p>暂无可导出的组织图，请先上传资料或打开虚拟演示 Demo。</p>
             )}
           </div>
         </section>
@@ -2353,3 +2470,4 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 }
 
 export default App;
+
