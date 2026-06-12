@@ -123,6 +123,14 @@ describe('exporters', () => {
     );
 
     expect(addSlideMock).toHaveBeenCalled();
+    const firstSlide = addSlideMock.mock.calls[0]?.[0];
+    const firstSlideText = firstSlide.addText.mock.calls.map(([text]: [unknown]) => String(text)).join('\n');
+    const secondSlide = addSlideMock.mock.calls[1]?.[0];
+    expect(firstSlideText).toContain('竞对组织总览');
+    expect(firstSlideText).not.toContain('CANVAS EXPORT');
+    expect(firstSlide.addImage).not.toHaveBeenCalled();
+    expect(secondSlide.addText).toHaveBeenCalled();
+    expect(secondSlide.addImage).toHaveBeenCalled();
     expect(writeFileMock).toHaveBeenCalledWith({ fileName: 'qa-export.pptx' });
   });
 });

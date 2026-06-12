@@ -406,7 +406,7 @@ export function buildOrgGraph(state: AppState, filters: OrgMapFilters, layout = 
         depthByName,
         directSpanAll,
         confidenceByName,
-        Math.min(filters.visibleLimit, 28),
+        Math.min(filters.visibleLimit, 64),
       )
     : undefined;
 

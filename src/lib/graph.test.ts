@@ -82,9 +82,33 @@ describe('org graph performance', () => {
 
     const minX = Math.min(...graph.nodes.map((node) => node.x));
     const maxX = Math.max(...graph.nodes.map((node) => node.x));
+    const depthOneCount = graph.nodes.filter((node) => node.depth === 1).length;
+    const depthTwoCount = graph.nodes.filter((node) => node.depth === 2).length;
+    const deepNodeCount = graph.nodes.filter((node) => node.depth >= 3).length;
+
     expect(maxX - minX).toBeLessThan(1800);
-    expect(graph.nodes.filter((node) => node.depth === 1).length).toBe(4);
+    expect(depthOneCount).toBe(4);
+    expect(depthTwoCount).toBeGreaterThanOrEqual(8);
+    expect(deepNodeCount).toBe(0);
     expect(graph.nodes.find((node) => node.depth === 0)?.levelLabel).toBe('L0 Exec');
+  });
+
+  it('lets report users expand more top-level branches without exposing deep individual layers', () => {
+    const state = createMapBusinessDemoState();
+    state.project.settings.orgChartMode = 'formal';
+    state.project.settings.activeCanvasView = 'executive';
+
+    const defaultGraph = buildOrgGraph(state, makeFilters());
+    const expandedGraph = buildOrgGraph(state, makeFilters({ visibleLimit: 64 }));
+
+    const defaultDepthOne = defaultGraph.nodes.filter((node) => node.depth === 1).length;
+    const expandedDepthOne = expandedGraph.nodes.filter((node) => node.depth === 1).length;
+    const expandedDeepNodes = expandedGraph.nodes.filter((node) => node.depth >= 3).length;
+
+    expect(defaultDepthOne).toBe(4);
+    expect(expandedDepthOne).toBeGreaterThan(defaultDepthOne);
+    expect(expandedDepthOne).toBeLessThanOrEqual(10);
+    expect(expandedDeepNodes).toBe(0);
   });
 
   it('keeps the recruiting regular chart grouped by top-level branches instead of spreading by depth lanes', () => {
