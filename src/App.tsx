@@ -326,7 +326,7 @@ function App() {
         const result = await importSourceFile(file, { enableOcr });
         candidateCount += result.candidates.length;
         setState((current) =>
-          appendAudit(addImportResult(current, result), 'import', `瀵煎叆 ${file.name}`, {
+          appendAudit(addImportResult(current, result), 'import', `导入 ${file.name}`, {
             entityCount: result.candidates.length,
             view: 'import',
             sourceName: file.name,
@@ -444,7 +444,7 @@ function App() {
   async function exportPptx(): Promise<void> {
     try {
       await exportReportPptx(state, filters);
-      setState((current) => appendAudit(current, 'export', '瀵煎嚭 PPTX', { entityCount: graph.nodes.length, view: 'export' }));
+      setState((current) => appendAudit(current, 'export', '导出 PPTX', { entityCount: graph.nodes.length, view: 'export' }));
       setToast('PPTX 已生成');
     } catch (error) {
       setToast(error instanceof Error ? error.message : String(error));
@@ -653,7 +653,6 @@ function ReviewView({
     .filter((candidate) => kindFilter === 'all' || candidate.kind === kindFilter)
     .slice(0, 160);
   const visibleIds = visibleCandidates.map((candidate) => candidate.id);
-  const allIds = candidates.map((candidate) => candidate.id);
   const queueNoteById = new Map<ReviewQueueKey, { label: string; tone: string }>([
     ['priority', { label: '优先确认', tone: 'queue-priority' }],
     ['review', { label: '待复核', tone: 'queue-review' }],
@@ -730,9 +729,6 @@ function ReviewView({
         <button type="button" className="secondary-button" onClick={() => onReject(visibleIds)} disabled={!visibleIds.length}>
           <X size={16} />
           忽略当前
-        </button>
-        <button type="button" className="secondary-button" onClick={() => onAccept(allIds)} disabled={!allIds.length}>
-          一键确认全部
         </button>
       </div>
 

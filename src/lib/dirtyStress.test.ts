@@ -5,7 +5,8 @@ import type { AnyCandidatePayload, CandidateKind, CandidateRecord, ImportResult,
 import { importSourceFile } from './importer';
 import { buildReviewQueueBuckets, buildReviewSourceAlerts } from './reviewQueue';
 
-const fixtureDir = path.resolve(process.cwd(), 'outputs/dirty-stress-100p');
+const fixtureDir = path.resolve(process.cwd(), 'src/fixtures/dirty-stress-100p');
+const reportDir = path.resolve(process.cwd(), 'outputs/dirty-stress-100p');
 
 interface ExpectedPerson {
   name: string;
@@ -190,9 +191,9 @@ describe('dirty 100-person upload and review stress test', () => {
       })),
     };
 
-    await mkdir(fixtureDir, { recursive: true });
-    await writeFile(path.join(fixtureDir, 'stress-report.json'), JSON.stringify(report, null, 2), 'utf8');
-    await writeFile(path.join(fixtureDir, 'stress-report.md'), markdownReport(report), 'utf8');
+    await mkdir(reportDir, { recursive: true });
+    await writeFile(path.join(reportDir, 'stress-report.json'), JSON.stringify(report, null, 2), 'utf8');
+    await writeFile(path.join(reportDir, 'stress-report.md'), markdownReport(report), 'utf8');
 
     expect(results).toHaveLength(6);
     expect(allCandidates.length).toBeGreaterThan(150);

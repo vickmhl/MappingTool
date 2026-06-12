@@ -4,7 +4,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import pptxgen from 'pptxgenjs';
 
-const outDir = path.resolve('outputs/dirty-stress-100p');
+const outDir = path.resolve('src/fixtures/dirty-stress-100p');
 const company = '云图地图科技有限公司';
 
 const departments = [

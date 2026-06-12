@@ -7,6 +7,12 @@ coverage
 .vite
 *.local
 *.tsbuildinfo
+*.log
+review-*.png
+tree-check.json
+.gh-local
+release
+outputs
 dev-server.log
 vite.config.js
 vite.config.d.ts
