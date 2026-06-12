@@ -22,6 +22,12 @@
 
 .workspace {
   padding: 22px;
+  overflow-x: hidden;
+}
+
+.map-layout,
+.view-stack {
+  min-width: 0;
 }
 
 .view-stack {
@@ -81,7 +87,7 @@
 }
 
 .canvas-command-bar {
-  grid-template-columns: auto auto minmax(260px, 1fr) auto;
+  grid-template-columns: auto auto minmax(220px, 1fr) minmax(0, auto);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -95,6 +101,11 @@
 
 .canvas-actions {
   justify-content: flex-end;
+  min-width: 0;
+}
+
+.primary-canvas-actions {
+  flex-wrap: wrap;
 }
 
 .canvas-search-field {
@@ -223,17 +234,20 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-items: start;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .map-canvas-shell.has-inspector {
-  grid-template-columns: minmax(0, 1fr) 344px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 344px);
 }
 
 .map-canvas-shell.has-call-panel {
-  grid-template-columns: minmax(0, 1fr) 404px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 404px);
 }
 
 .flow-surface {
+  min-width: 0;
   height: calc(100vh - 208px);
   min-height: 620px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
@@ -273,10 +287,10 @@
 
 .flow-node.business-report.report-depth-0 {
   color: var(--v3-ink);
-  background: linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%);
-  border-color: #b9d2ff;
-  border-top-color: #1f5eff;
-  box-shadow: 0 14px 28px rgb(37 99 235 / 11%);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border-color: #c8d5e6;
+  border-top-color: #1e3a8a;
+  box-shadow: 0 12px 26px rgb(15 23 42 / 8%);
 }
 
 .flow-node.business-report.report-depth-0 .flow-node-top small,
@@ -293,8 +307,8 @@
 
 .flow-node.business-report.report-depth-0 .report-node-metrics b,
 .flow-node.business-report.report-depth-0 .report-node-metrics i {
-  background: #ffffff;
-  border: 1px solid #cfe0ff;
+  background: #f6f8fb;
+  border: 1px solid #e2e8f0;
 }
 
 .flow-node.business-report.report-depth-0 .report-node-metrics i {
@@ -581,6 +595,9 @@
   top: 74px;
   display: grid;
   gap: 14px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 16px;
   background: var(--v3-panel);
   border: 1px solid var(--v3-line);
@@ -594,6 +611,9 @@
   display: grid;
   gap: 16px;
   align-self: start;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   max-height: calc(100vh - 96px);
   overflow: auto;
   padding: 18px;
@@ -617,6 +637,7 @@
 .call-mapping-panel .field textarea {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
 }
 

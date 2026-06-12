@@ -217,38 +217,59 @@ function buildReportVisibleNames(
     depthByName,
   );
   const visibleNames = new Set<string>();
-  const levelTwoManagers: string[] = [];
+  const addVisibleName = (name: string): boolean => {
+    if (visibleNames.has(name)) return true;
+    if (visibleNames.size >= limit) return false;
+    visibleNames.add(name);
+    return true;
+  };
 
-  for (const name of orderedNames) {
-    const depth = depthByName.get(name) ?? 0;
-    if (depth <= 2 && visibleNames.size < limit) visibleNames.add(name);
-    if (depth === 2) levelTwoManagers.push(name);
-  }
+  const rootNames = orderedNames.filter((name) => (depthByName.get(name) ?? 0) === 0);
+  const levelOneCap = limit <= 28 ? 4 : limit <= 64 ? 10 : 14;
+  const levelOneNames = orderedNames.filter((name) => (depthByName.get(name) ?? 0) === 1).slice(0, levelOneCap);
 
-  if (visibleNames.size >= limit) return visibleNames;
+  for (const name of rootNames) addVisibleName(name);
+  for (const name of levelOneNames) addVisibleName(name);
 
-  const expandableManagers = levelTwoManagers.slice().sort((a, b) => {
-    const spanDelta = (directSpanAll.get(a) ?? 0) - (directSpanAll.get(b) ?? 0);
-    if (spanDelta !== 0) return spanDelta;
-    return (peopleByName.get(a)?.currentDepartment ?? '').localeCompare(
-      peopleByName.get(b)?.currentDepartment ?? '',
-      'zh-Hans-CN',
-    );
-  });
-
-  for (const manager of expandableManagers) {
-    const directCount = directSpanAll.get(manager) ?? 0;
-    if (directCount === 0 || directCount > 5) continue;
-    const averageConfidence = averageConfidenceFor(manager, confidenceByName);
-    if (averageConfidence > 0 && averageConfidence < 0.75) continue;
-
-    const candidates = sortNamesByPerson(
-      (childrenByManager.get(manager) ?? []).filter((child) => (depthByName.get(child) ?? 0) === 3),
+  for (const parent of levelOneNames) {
+    if (visibleNames.size >= limit) break;
+    const directChildren = sortNamesByPerson(
+      (childrenByManager.get(parent) ?? []).filter((child) => (depthByName.get(child) ?? 0) === 2),
       peopleByName,
       depthByName,
-    );
-    if (candidates.length === 0 || visibleNames.size + candidates.length > limit) continue;
-    for (const child of candidates) visibleNames.add(child);
+    )
+      .slice()
+      .sort((a, b) => {
+        const spanDelta = (directSpanAll.get(b) ?? 0) - (directSpanAll.get(a) ?? 0);
+        if (spanDelta !== 0) return spanDelta;
+        return averageConfidenceFor(b, confidenceByName) - averageConfidenceFor(a, confidenceByName);
+      })
+      .slice(0, 3);
+    for (const child of directChildren) {
+      if (!addVisibleName(child)) break;
+    }
+  }
+
+  const levelTwoManagers = levelOneNames.flatMap((parent) =>
+    sortNamesByPerson(
+      (childrenByManager.get(parent) ?? []).filter((child) => (depthByName.get(child) ?? 0) === 2),
+      peopleByName,
+      depthByName,
+    ),
+  );
+
+  if (visibleNames.size < limit) {
+    const remainingLevelTwo = levelTwoManagers
+      .filter((name) => !visibleNames.has(name))
+      .sort((a, b) => {
+        const spanDelta = (directSpanAll.get(b) ?? 0) - (directSpanAll.get(a) ?? 0);
+        if (spanDelta !== 0) return spanDelta;
+        return averageConfidenceFor(b, confidenceByName) - averageConfidenceFor(a, confidenceByName);
+      });
+
+    for (const name of remainingLevelTwo) {
+      if (!addVisibleName(name)) break;
+    }
   }
 
   return visibleNames;
@@ -793,11 +814,11 @@ function buildExecutivePositions(
   if (!root) return new Map();
 
   const positions = new Map<string, { x: number; y: number }>();
-  const groupGapX = 42;
-  const childGapX = 32;
+  const groupGapX = 78;
+  const childGapX = 34;
+  const childGapY = 34;
   const levelRootY = 72;
-  const levelOneY = 236;
-  const levelTwoY = 404;
+  const levelOneStartY = 252;
   const levelThreeGapY = FORMAL_CARD_HEIGHT + 34;
 
   const visibleChildrenOf = (name: string): string[] =>
@@ -810,50 +831,61 @@ function buildExecutivePositions(
   const levelOneNames = visibleChildrenOf(root);
   const levelOneGroups = levelOneNames.map((name) => {
     const levelTwoNames = visibleChildrenOf(name).filter((child) => (depthByName.get(child) ?? 0) === 2);
-    const columns = 1;
     const width = FORMAL_CARD_WIDTH;
-    return { name, levelTwoNames, columns, width };
+    return { name, levelTwoNames, width };
   });
 
-  const totalWidth =
-    levelOneGroups.reduce((sum, group) => sum + group.width, 0) + Math.max(0, levelOneGroups.length - 1) * groupGapX;
+  const groupsByName = new Map(levelOneGroups.map((group) => [group.name, group]));
+  const maxColumns = Math.max(1, Math.min(5, levelOneGroups.length));
+  const groupRows = chunkNames(
+    levelOneGroups.map((group) => group.name),
+    maxColumns,
+  ).map((row) => row.map((name) => groupsByName.get(name)!).filter(Boolean));
+  const rowWidths = groupRows.map(
+    (row) => row.reduce((sum, group) => sum + group.width, 0) + Math.max(0, row.length - 1) * groupGapX,
+  );
+  const totalWidth = Math.max(FORMAL_CARD_WIDTH, ...rowWidths);
   const startX = 92;
-  const rootX = levelOneGroups.length > 0 ? startX + totalWidth / 2 - FORMAL_CARD_WIDTH / 2 : startX;
+  const rootX = startX + totalWidth / 2 - FORMAL_CARD_WIDTH / 2;
   positions.set(root, { x: rootX, y: levelRootY });
 
-  let cursorX = startX;
-  for (const group of levelOneGroups) {
-    const groupStartX = cursorX;
-    const groupCenterX = groupStartX + group.width / 2 - FORMAL_CARD_WIDTH / 2;
-    positions.set(group.name, { x: groupCenterX, y: levelOneY });
+  let cursorY = levelOneStartY;
+  for (const [rowIndex, row] of groupRows.entries()) {
+    const rowWidth = rowWidths[rowIndex] ?? totalWidth;
+    const rowStartX = startX + Math.max(0, (totalWidth - rowWidth) / 2);
+    const maxChildrenInRow = Math.max(0, ...row.map((group) => group.levelTwoNames.length));
+    const rowHeight =
+      FORMAL_CARD_HEIGHT +
+      (maxChildrenInRow > 0
+        ? 78 + maxChildrenInRow * FORMAL_CARD_HEIGHT + Math.max(0, maxChildrenInRow - 1) * childGapY
+        : 0);
 
-    const rows = chunkNames(group.levelTwoNames, group.columns);
-    rows.forEach((rowNames, rowIndex) => {
-      const rowWidth = rowNames.length * FORMAL_CARD_WIDTH + Math.max(0, rowNames.length - 1) * childGapX;
-      const rowStartX = groupStartX + Math.max(0, (group.width - rowWidth) / 2);
+    row.forEach((group, columnIndex) => {
+      const groupStartX = rowStartX + columnIndex * (FORMAL_CARD_WIDTH + groupGapX);
+      positions.set(group.name, { x: groupStartX, y: cursorY });
 
-      rowNames.forEach((name, columnIndex) => {
-        const childX = rowStartX + columnIndex * (FORMAL_CARD_WIDTH + childGapX);
-        const childY = levelTwoY + rowIndex * (FORMAL_CARD_HEIGHT + 44);
+      group.levelTwoNames.forEach((name, childIndex) => {
+        const childX = groupStartX;
+        const childY = cursorY + FORMAL_CARD_HEIGHT + 78 + childIndex * (FORMAL_CARD_HEIGHT + childGapY);
         positions.set(name, { x: childX, y: childY });
 
         const levelThreeNames = visibleChildrenOf(name).filter((child) => (depthByName.get(child) ?? 0) === 3);
         levelThreeNames.forEach((levelThreeName, levelThreeIndex) => {
           positions.set(levelThreeName, {
-            x: childX,
-            y: childY + levelThreeGapY + levelThreeIndex * levelThreeGapY,
+            x: childX + FORMAL_CARD_WIDTH + childGapX,
+            y: childY + levelThreeIndex * levelThreeGapY,
           });
         });
       });
     });
 
-    cursorX += group.width + groupGapX;
+    cursorY += rowHeight + 96;
   }
 
   const trailingRoots = orderedRoots.filter((name) => name !== root);
   let trailingX = startX + totalWidth + 120;
   for (const name of trailingRoots) {
-    positions.set(name, { x: trailingX, y: levelOneY });
+    positions.set(name, { x: trailingX, y: levelOneStartY });
     trailingX += FORMAL_CARD_WIDTH + groupGapX;
   }
 
@@ -864,7 +896,7 @@ function buildExecutivePositions(
     const depth = depthByName.get(name) ?? 0;
     positions.set(name, {
       x: fallbackX,
-      y: levelOneY + depth * 132,
+      y: levelOneStartY + depth * 132,
     });
     fallbackX += FORMAL_CARD_WIDTH + childGapX;
   }

@@ -1648,6 +1648,31 @@ function OrgMapView({
         );
       };
 
+      const fitReportTopBounds = () => {
+        const primaryNodes = graph.nodes.filter((node) => node.depth <= 1);
+        const surface = document.querySelector('.flow-surface');
+        const surfaceRect = surface?.getBoundingClientRect();
+        if (primaryNodes.length === 0 || !surfaceRect) {
+          fitPrimaryBounds(1, 0.12, 240, 116);
+          return;
+        }
+        const nodeWidth = 240;
+        const nodeHeight = 116;
+        const minX = Math.min(...primaryNodes.map((node) => node.x));
+        const maxX = Math.max(...primaryNodes.map((node) => node.x));
+        const minY = Math.min(...primaryNodes.map((node) => node.y));
+        const maxY = Math.max(...primaryNodes.map((node) => node.y));
+        const boundsWidth = maxX - minX + nodeWidth;
+        const boundsHeight = maxY - minY + nodeHeight;
+        const zoom = Math.max(
+          0.46,
+          Math.min(0.82, (surfaceRect.width - 96) / boundsWidth, (surfaceRect.height * 0.56) / boundsHeight),
+        );
+        const x = (surfaceRect.width - boundsWidth * zoom) / 2 - minX * zoom;
+        const y = 58 - minY * zoom;
+        void flowInstance.setViewport({ x, y, zoom }, { duration: 260 });
+      };
+
       if (savedCount > 0) {
         void flowInstance.fitView({ duration: 260, padding: isTree ? 0.12 : 0.08, includeHiddenNodes: false });
         return;
@@ -1659,7 +1684,7 @@ function OrgMapView({
       }
 
       if (isReportMode) {
-        fitPrimaryBounds(2, 0.16, 240, 116);
+        fitReportTopBounds();
         return;
       }
 

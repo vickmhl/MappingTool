@@ -31,7 +31,7 @@ describe('org graph performance', () => {
 
     expect(state.people.length).toBeGreaterThan(5000);
     expect(graph.nodes.length).toBeLessThanOrEqual(300);
-    expect(graph.lanes.length).toBeGreaterThan(5);
+    expect(graph.lanes.length).toBeGreaterThanOrEqual(4);
     expect(graph.diagnostics.hiddenDirectReports).toBeGreaterThan(50);
     expect(metrics.peopleCount).toBe(state.people.length);
     expect(graphDuration).toBeLessThan(1000);
@@ -82,8 +82,8 @@ describe('org graph performance', () => {
 
     const minX = Math.min(...graph.nodes.map((node) => node.x));
     const maxX = Math.max(...graph.nodes.map((node) => node.x));
-    expect(maxX - minX).toBeLessThan(3400);
-    expect(graph.nodes.filter((node) => node.depth === 1).length).toBeGreaterThanOrEqual(8);
+    expect(maxX - minX).toBeLessThan(1800);
+    expect(graph.nodes.filter((node) => node.depth === 1).length).toBe(4);
     expect(graph.nodes.find((node) => node.depth === 0)?.levelLabel).toBe('L0 Exec');
   });
 

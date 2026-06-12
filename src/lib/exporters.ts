@@ -2,6 +2,7 @@ import type { AppState, OrgChartExportFormat, OrgMapFilters, Person } from '../t
 import { buildOrgGraph } from './graph';
 import { buildExecutiveNarrative } from './insights';
 import { normalizeName } from './ids';
+import { buildOrgHierarchyModel, changeTypeText, clipText, type ReportOrgCard } from './reportModel';
 
 function maskName(name: string): string {
   if (!name) return '';
@@ -424,142 +425,6 @@ export function exportOrgGraphPng(
   return canvas.toDataURL('image/png');
 }
 
-interface ReportOrgCard {
-  key: string;
-  personName: string;
-  title: string;
-  department: string;
-  company: string;
-  directCount: number;
-  totalCount: number;
-  changeCount: number;
-  evidenceCount: number;
-  confidence: number;
-  note: string;
-}
-
-interface OrgHierarchyModel {
-  root?: ReportOrgCard;
-  firstLayer: ReportOrgCard[];
-  secondLayerGroups: Array<{ parent: ReportOrgCard; children: ReportOrgCard[] }>;
-}
-
-function clipText(value: string | undefined, maxLength: number): string {
-  const text = (value ?? '').replace(/\s+/g, ' ').trim();
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
-}
-
-function changeTypeText(type: string): string {
-  const labels: Record<string, string> = {
-    new: '新增',
-    resigned: '离职',
-    transfer: '调岗',
-    'reporting-change': '汇报变化',
-    conflict: '冲突',
-    stale: '过期',
-  };
-  return labels[type] ?? type;
-}
-
-function buildOrgHierarchyModel(state: AppState): OrgHierarchyModel {
-  const peopleByName = new Map(state.people.map((person) => [normalizeName(person.name), person]));
-  const childrenByManager = new Map<string, string[]>();
-  const managerBySubordinate = new Map<string, string>();
-  const confidenceByName = new Map<string, number[]>();
-
-  for (const line of state.reportingLines.filter((item) => item.isCurrent)) {
-    const manager = normalizeName(line.managerName);
-    const subordinate = normalizeName(line.subordinateName);
-    if (!peopleByName.has(manager) || !peopleByName.has(subordinate)) continue;
-    childrenByManager.set(manager, [...(childrenByManager.get(manager) ?? []), subordinate]);
-    managerBySubordinate.set(subordinate, manager);
-    confidenceByName.set(manager, [...(confidenceByName.get(manager) ?? []), line.confidence]);
-    confidenceByName.set(subordinate, [...(confidenceByName.get(subordinate) ?? []), line.confidence]);
-  }
-
-  const recentChangeByName = new Map<string, number>();
-  for (const event of state.changeEvents) {
-    if (!event.personName) continue;
-    const time = new Date(event.date ?? event.createdAt).getTime();
-    if (Number.isFinite(time) && Date.now() - time > 90 * 86_400_000) continue;
-    const name = normalizeName(event.personName);
-    recentChangeByName.set(name, (recentChangeByName.get(name) ?? 0) + 1);
-  }
-
-  const descendantCache = new Map<string, number>();
-  const countDescendants = (name: string): number => {
-    if (descendantCache.has(name)) return descendantCache.get(name)!;
-    const visited = new Set<string>();
-    const queue = [...(childrenByManager.get(name) ?? [])];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (visited.has(current)) continue;
-      visited.add(current);
-      queue.push(...(childrenByManager.get(current) ?? []));
-    }
-    descendantCache.set(name, visited.size);
-    return visited.size;
-  };
-
-  const makeCard = (name: string): ReportOrgCard => {
-    const person = peopleByName.get(name);
-    const directCount = childrenByManager.get(name)?.length ?? 0;
-    const totalCount = countDescendants(name);
-    const changeCount = recentChangeByName.get(name) ?? 0;
-    const confidenceValues = confidenceByName.get(name) ?? [];
-    const confidence =
-      confidenceValues.length === 0
-        ? 0
-        : confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length;
-    const notes = [
-      directCount >= 18 ? `管理跨度 ${directCount}，建议拆二级` : '',
-      changeCount > 0 ? `近90天 ${changeCount} 条变动` : '',
-      confidence > 0 && confidence < 0.75 ? '汇报线需复核' : '',
-      person?.sensitiveNote ? clipText(person.sensitiveNote, 20) : '',
-    ].filter(Boolean);
-    return {
-      key: name,
-      personName: person?.name ?? name,
-      title: person?.currentTitle ?? '岗位待确认',
-      department: person?.currentDepartment ?? '部门待确认',
-      company: person?.company ?? '公司待确认',
-      directCount,
-      totalCount,
-      changeCount,
-      evidenceCount: person?.evidenceIds.length ?? 0,
-      confidence,
-      note: notes[0] ?? '结构可用于汇报，细节可点开复核',
-    };
-  };
-
-  const sortByScale = (a: string, b: string): number =>
-    countDescendants(b) - countDescendants(a) ||
-    (childrenByManager.get(b)?.length ?? 0) - (childrenByManager.get(a)?.length ?? 0) ||
-    (peopleByName.get(a)?.currentDepartment ?? '').localeCompare(peopleByName.get(b)?.currentDepartment ?? '', 'zh-Hans-CN');
-
-  const roots = [...peopleByName.keys()]
-    .filter((name) => !managerBySubordinate.has(name) && (childrenByManager.get(name)?.length ?? 0) > 0)
-    .sort(sortByScale);
-  const rootKey = roots[0] ?? [...childrenByManager.keys()].sort(sortByScale)[0];
-  if (!rootKey) return { firstLayer: [], secondLayerGroups: [] };
-
-  const firstLayerKeys = (childrenByManager.get(rootKey) ?? []).sort(sortByScale).slice(0, 6);
-  const secondLayerGroups = firstLayerKeys
-    .slice(0, 4)
-    .map((parentKey) => ({
-      parent: makeCard(parentKey),
-      children: (childrenByManager.get(parentKey) ?? []).sort(sortByScale).slice(0, 4).map(makeCard),
-    }))
-    .filter((group) => group.children.length > 0);
-
-  return {
-    root: makeCard(rootKey),
-    firstLayer: firstLayerKeys.map(makeCard),
-    secondLayerGroups,
-  };
-}
-
 export async function exportReportPptx(
   state: AppState,
   filters: OrgMapFilters,
@@ -768,9 +633,30 @@ export async function exportReportPptx(
 
   let pageNumber = 1;
 
-  const mainSlide = pptx.addSlide();
-  addHeader(mainSlide, 'CANVAS EXPORT', state.project.name, `按 ${activeCanvasLabel} 导出，保留当前筛选条件与手动布局。`);
-  mainSlide.addText('', {
+  const overviewSlide = pptx.addSlide();
+  addHeader(overviewSlide, 'COMPETITOR ORG MAPPING', '竞对组织总览', maskKnownPeopleText(state, narrative.headline));
+  addMetric(overviewSlide, 0.62, 1.55, 2.25, shouldMaskCompanies(state) ? '公司已脱敏' : '覆盖公司', shouldMaskCompanies(state) ? '已脱敏' : `${state.project.companies.length} 家`);
+  addMetric(overviewSlide, 3.08, 1.55, 2.25, '人员样本', `${state.people.length} 人`, deck.green);
+  addMetric(overviewSlide, 5.54, 1.55, 2.25, '当前汇报线', `${narrative.metrics.reportingLineCount} 条`);
+  addMetric(overviewSlide, 8.0, 1.55, 2.25, '汇报准备度', `${narrative.metrics.readinessScore} 分`, narrative.metrics.readinessScore >= 82 ? deck.green : deck.amber);
+  addMetric(overviewSlide, 10.46, 1.55, 2.25, '待确认', `${pendingCount} 条`, pendingCount > 0 ? deck.red : deck.green);
+  if (orgModel.root) {
+    addOrgCard(overviewSlide, orgModel.root, 0.62, 2.45, 2.75, 1.28, { accent: deck.blueDark, root: true });
+  }
+  orgModel.firstLayer.slice(0, 6).forEach((card, index) => {
+    const x = 3.68 + (index % 3) * 2.88;
+    const y = 2.45 + Math.floor(index / 3) * 1.12;
+    addOrgCard(overviewSlide, card, x, y, 2.56, 0.92, { accent: card.changeCount > 0 ? deck.amber : deck.line });
+  });
+  overviewSlide.addText('', { x: 0.62, y: 4.95, w: 5.78, h: 1.36, fill: { color: deck.panel }, line: { color: deck.line, pt: 0.8 }, margin: 0 });
+  addBulletPanel(overviewSlide, 0.88, 5.16, 5.3, 0.9, '管理层先看三件事', narrative.summaryBullets.slice(0, 3));
+  overviewSlide.addText('', { x: 6.72, y: 4.95, w: 5.82, h: 1.36, fill: { color: deck.blueSoft }, line: { color: 'CFE0FF', pt: 0.8 }, margin: 0 });
+  addBulletPanel(overviewSlide, 6.98, 5.16, 5.3, 0.9, '建议动作', narrative.nextActions.slice(0, 3));
+  addFooter(overviewSlide, pageNumber++);
+
+  const structureSlide = pptx.addSlide();
+  addHeader(structureSlide, 'ORG STRUCTURE', '一级组织架构', `按 ${activeCanvasLabel} 输出，只保留当前可汇报层级与必要备注。`);
+  structureSlide.addText('', {
     x: 0.62,
     y: 1.48,
     w: 8.68,
@@ -780,9 +666,9 @@ export async function exportReportPptx(
     margin: 0,
   });
   if (exportGraph.nodes.length > 0) {
-    mainSlide.addImage({ data: chartPreviewWide, x: 0.78, y: 1.66, w: 8.36, h: 5.0 });
+    structureSlide.addImage({ data: chartPreviewWide, x: 0.78, y: 1.66, w: 8.36, h: 5.0 });
   } else {
-    mainSlide.addText('暂无可导出的组织图，请先确认候选关系。', {
+    structureSlide.addText('暂无可导出的组织图，请先确认候选关系。', {
       x: 1.0,
       y: 3.75,
       w: 7.6,
@@ -793,7 +679,7 @@ export async function exportReportPptx(
       align: 'center',
     });
   }
-  mainSlide.addText('', {
+  structureSlide.addText('', {
     x: 9.58,
     y: 1.48,
     w: 3.02,
@@ -802,8 +688,8 @@ export async function exportReportPptx(
     line: { color: deck.line, pt: 0.75 },
     margin: 0,
   });
-  mainSlide.addText('导出摘要', { x: 9.84, y: 1.72, w: 1.6, h: 0.24, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
-  mainSlide.addText(
+  structureSlide.addText('结构图说明', { x: 9.84, y: 1.72, w: 1.6, h: 0.24, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
+  structureSlide.addText(
     [
       `视图：${activeCanvasLabel}`,
       `节点：${exportGraph.nodes.length}`,
@@ -824,7 +710,7 @@ export async function exportReportPptx(
     },
   );
   addBulletPanel(
-    mainSlide,
+    structureSlide,
     9.84,
     3.8,
     2.44,
@@ -832,37 +718,7 @@ export async function exportReportPptx(
     '关键备注',
     chartHighlights.length > 0 ? chartHighlights : ['当前画布未发现需要额外说明的结构异常。'],
   );
-  addFooter(mainSlide, pageNumber++);
-
-  const overviewSlide = pptx.addSlide();
-  addHeader(overviewSlide, 'COMPETITOR ORG MAPPING', '组织判断总览', maskKnownPeopleText(state, narrative.headline));
-  addMetric(overviewSlide, 0.62, 1.55, 2.25, shouldMaskCompanies(state) ? '公司已脱敏' : '覆盖公司', shouldMaskCompanies(state) ? '已脱敏' : `${state.project.companies.length} 家`);
-  addMetric(overviewSlide, 3.08, 1.55, 2.25, '人员样本', `${state.people.length} 人`, deck.green);
-  addMetric(overviewSlide, 5.54, 1.55, 2.25, '当前汇报线', `${narrative.metrics.reportingLineCount} 条`);
-  addMetric(overviewSlide, 8.0, 1.55, 2.25, '汇报准备度', `${narrative.metrics.readinessScore} 分`, narrative.metrics.readinessScore >= 82 ? deck.green : deck.amber);
-  addMetric(overviewSlide, 10.46, 1.55, 2.25, '待确认', `${pendingCount} 条`, pendingCount > 0 ? deck.red : deck.green);
-  overviewSlide.addText('', { x: 0.62, y: 2.45, w: 7.35, h: 3.82, fill: { color: deck.panel }, line: { color: deck.line, pt: 0.8 }, margin: 0 });
-  addBulletPanel(overviewSlide, 0.9, 2.78, 6.75, 1.38, '管理层先看三件事', narrative.summaryBullets.slice(0, 3));
-  overviewSlide.addShape(pptx.ShapeType.line, { x: 0.9, y: 4.4, w: 6.65, h: 0, line: { color: deck.line, pt: 0.6 } });
-  addBulletPanel(overviewSlide, 0.9, 4.68, 6.75, 1.12, '建议动作', narrative.nextActions.slice(0, 2));
-  overviewSlide.addText('', { x: 8.28, y: 2.45, w: 4.28, h: 3.82, fill: { color: deck.blueSoft }, line: { color: 'CFE0FF', pt: 0.8 }, margin: 0 });
-  overviewSlide.addText('本页结论', { x: 8.58, y: 2.78, w: 1.4, h: 0.28, fontSize: 12, bold: true, color: deck.blueDark, margin: 0 });
-  overviewSlide.addText(clipText(maskKnownPeopleText(state, narrative.nextActions[0] ?? narrative.headline), 78), {
-    x: 8.58,
-    y: 3.2,
-    w: 3.55,
-    h: 1.05,
-    fontSize: 13,
-    bold: true,
-    color: deck.ink,
-    fit: 'shrink',
-    margin: 0,
-  });
-  overviewSlide.addText(
-    `适用场景：向上汇报组织判断、同步高招 mapping 方向、标记需要复核的关键岗位。`,
-    { x: 8.58, y: 4.58, w: 3.45, h: 0.8, fontSize: 8.5, color: deck.muted, fit: 'shrink', margin: 0 },
-  );
-  addFooter(overviewSlide, pageNumber++);
+  addFooter(structureSlide, pageNumber++);
 
   const layerSlide = pptx.addSlide();
   addHeader(layerSlide, 'ORG DETAIL', '关键团队二级拆解', '优先展开管理跨度大、近期变动多或高招价值高的团队。');
